@@ -1,0 +1,96 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    tags: [ "v*" ]
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) - All-in-one image
+        id: meta-clipchan
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/clipchan
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Extract metadata (tags, labels) - Frontend image
+        id: meta-clipchan-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/clipchan-web
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Extract metadata (tags, labels) - Backend image
+        id: meta-clipchan-server
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/clipchan-server
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push - All-in-one image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta-clipchan.outputs.tags }}
+          labels: ${{ steps.meta-clipchan.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push - Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./frontend.Dockerfile
+          push: true
+          tags: ${{ steps.meta-clipchan-web.outputs.tags }}
+          labels: ${{ steps.meta-clipchan-web.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push - Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend.Dockerfile
+          push: true
+          tags: ${{ steps.meta-clipchan-server.outputs.tags }}
+          labels: ${{ steps.meta-clipchan-server.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

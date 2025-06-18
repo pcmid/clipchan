@@ -1,0 +1,39 @@
+[package]
+name = "clipchan"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.45", features = ["full"] }
+anyhow = "1.0"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0"}
+chrono = { version = "0.4.41", features = ["serde"] }
+config = {version = "0.15.11"}
+dotenvy = { version = "0.15.7", features = ["clap"] }
+axum = { version = "0.8.4", features = ["multipart", "macros"] }
+tower-http = { version = "0.6.6", features = ["cors"] }
+clap = { version = "4.5", features = ["derive"] }
+sea-orm = { version = "1.1", features = ["sqlx-all", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+migration = { path = "src/core/entity/migration" }
+uuid = { version = "1.17", features = ["v4"] }
+futures-util = "0.3.31"
+tokio-util = { version = "0.7.15", features = ["io"] }
+apalis = { version = "0.7.2", features = ["limit"] }
+gstreamer = { version = "0.23.6",features = ["default"] }
+gstreamer-app = { version = "0.23.5",features = ["default"] }
+bilive = { path = "bilive" }
+jsonwebtoken = "9.2"
+axum-extra = { version = "0.10.1", features = ["typed-header"] }
+thiserror = "2.0"
+bytesize = { version = "2.0" , features = ["serde"] }
+qrcode = "0.14.1"
+dashmap = "6.1.0"
+cookie_store = "0.21.1"
+reqwest_cookie_store = { version = "0.8.0", features = ["serde"] }
+
+[dev-dependencies]
+tokio = { version = "1.45", features = ["full"] }
+ctor = "0.4.2"
