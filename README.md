@@ -176,4 +176,4 @@ title_valign = "top"
 
 ## 开源协议
 
-(MIT)[https://github.com/pcmid/clipchan/blob/main/LICENSE]
+[MIT](https://github.com/pcmid/clipchan/blob/main/LICENSE)
