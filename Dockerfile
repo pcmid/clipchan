@@ -40,11 +40,11 @@ RUN echo 'server { \
     listen 80; \
     root /var/www/html; \
     index index.html; \
+    client_max_body_size 0; \
     location /api/ { \
         proxy_pass http://localhost:3000/; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
-        proxy_byte_size_limit 1024m; \
     } \
     location / { \
         try_files $uri $uri/ /index.html; \
