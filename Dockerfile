@@ -21,7 +21,7 @@ RUN npx vite build
 
 FROM debian:bookworm-slim AS final
 
-WORKDIR /app
+WORKDIR /
 
 RUN apt-get update && \
     apt-get install -y openssl ca-certificates nginx ffmpeg \
@@ -30,11 +30,11 @@ RUN apt-get update && \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=backend-builder /build/target/release/clipchan /app/
+COPY --from=backend-builder /build/target/release/clipchan /
 COPY --from=frontend-builder /build/dist /var/www/html
 
-RUN mkdir -p /app/data/clips /app/data/temp /app/config
-COPY clipchan.toml /app/config
+RUN mkdir -p /data/clips /data/temp /config
+COPY clipchan.toml /config
 
 RUN echo 'server { \
     listen 80; \
@@ -52,14 +52,13 @@ RUN echo 'server { \
 
 RUN echo '#!/bin/bash\n\
 service nginx start\n\
-cd /app\n\
 ./clipchan -c config/clipchan.toml\n\
-' > /app/start.sh && chmod +x /app/start.sh
+' > /start.sh && chmod +x /start.sh
 
 ENV RUST_LOG="info,sea_orm=warn,sqlx=warn"
 
 # 暴露端口
-EXPOSE 80
+EXPOSE 80 3000
 
 # 启动应用
-CMD ["/app/start.sh"]
+CMD ["/start.sh"]

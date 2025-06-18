@@ -34,8 +34,8 @@ docker build -t clipchan:latest .
 
 # 运行容器
 docker run -d -p 80:80 \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/config:/app/config \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/config:/config \
   --name clipchan clipchan:latest
 
 # 查看容器日志
@@ -54,8 +54,8 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./data:/app/data
-      - ./config:/app/config
+      - ./data:/data
+      - ./config:/config
     environment:
       - RUST_LOG=info
 EOF
@@ -108,8 +108,8 @@ ClipChan 支持两种配置方式：环境变量和配置文件。
 
 #### 配置文件位置
 
-- 在本地运行时：`./config/clipchan.toml` 或 `./config/clipchan.yaml`
-- 在Docker中运行时：`/app/config/clipchan.toml` 或 `/app/config/clipchan.yaml`
+- 在本地运行时：`./clipchan.toml`
+- 在Docker中运行时：`/config/clipchan.toml`
 
 #### TOML格式配置示例
 
