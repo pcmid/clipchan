@@ -44,6 +44,7 @@ RUN echo 'server { \
         proxy_pass http://localhost:3000/; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
+        proxy_byte_size_limit 1024m; \
     } \
     location / { \
         try_files $uri $uri/ /index.html; \
