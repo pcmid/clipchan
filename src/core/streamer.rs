@@ -119,7 +119,6 @@ impl RtmpStreamer {
         let capsfilter_h264 = gst::ElementFactory::make("capsfilter")
             .property("caps", &h264_caps)
             .build()?;
-        let queue_video = gst::ElementFactory::make("queue").build()?;
 
         // video
         let audio_src = gst::ElementFactory::make("appsrc")
@@ -128,10 +127,9 @@ impl RtmpStreamer {
             .property("do-timestamp", &true)
             .property("format", &gst::Format::Time)
             .build()?;
-
         let audioconvert = gst::ElementFactory::make("audioconvert").build()?;
 
-        let aacenc = gst::ElementFactory::make("avenc_aac").build()?;
+        let aacenc = gst::ElementFactory::make("fdkaacenc").build()?;
         let aacparse = gst::ElementFactory::make("aacparse").build()?;
         let aac_caps = gst::Caps::builder("audio/mpeg")
             .field("mpegversion", 4i32)
@@ -141,16 +139,22 @@ impl RtmpStreamer {
         let capsfilter_aac = gst::ElementFactory::make("capsfilter")
             .property("caps", &aac_caps)
             .build()?;
-        let queue_audio = gst::ElementFactory::make("queue").build()?;
 
         // rtmp muxer and sink
         let muxer = gst::ElementFactory::make("flvmux")
             .name("mux")
             .property("streamable", &true)
-            .property("latency", &(5 * 1000u64))
+            .property("latency", &(15 * 1000u64))
+            .build()?;
+        let queue_muxer = gst::ElementFactory::make("queue")
+            .name("muxer_queue")
+            .property_from_str("leaky", "no")
+            .property("max-size-buffers", &900u32)
+            .property("max-size-time", &15_000_000_000u64)
             .build()?;
         let sink = gst::ElementFactory::make("rtmpsink")
             .property("location", &self.rtmp_url)
+            .property("sync", &false)
             .build()?;
 
         // add elements to pipeline
@@ -161,14 +165,13 @@ impl RtmpStreamer {
             &x264enc,
             &h264parse,
             &capsfilter_h264,
-            &queue_video,
             &audio_src,
             &audioconvert,
             &aacenc,
             &aacparse,
             &capsfilter_aac,
-            &queue_audio,
             &muxer,
+            &queue_muxer,
             &sink,
         ])?;
 
@@ -180,9 +183,8 @@ impl RtmpStreamer {
             &x264enc,
             &h264parse,
             &capsfilter_h264,
-            &queue_video,
+            &muxer,
         ])?;
-        queue_video.link(&muxer)?;
 
         // link audio elements
         gst::Element::link_many(&[
@@ -191,11 +193,10 @@ impl RtmpStreamer {
             &aacenc,
             &aacparse,
             &capsfilter_aac,
-            &queue_audio,
+            &muxer,
         ])?;
-        queue_audio.link(&muxer)?;
-        muxer.link(&sink)?;
-        // start
+        muxer.link(&queue_muxer)?;
+        queue_muxer.link(&sink)?;
 
         let mut state = self.state.lock().await;
         if state.is_streaming {
@@ -308,7 +309,6 @@ impl RtmpStreamer {
         let pipeline = gst::Pipeline::new();
 
         // Create source element
-        let mut elements = Vec::new();
         let src = gst::ElementFactory::make("appsrc")
             .name("source")
             .property("is-live", &true)
@@ -317,20 +317,14 @@ impl RtmpStreamer {
             .property("max-bytes", &65536u64)
             .property("do-timestamp", &true)
             .build()?;
-        elements.push(&src);
-
         let decodebin = gst::ElementFactory::make("decodebin").build()?;
-        elements.push(&decodebin);
         pipeline.add_many(&[&src, &decodebin])?;
         src.link(&decodebin)?;
 
         // Create video and audio converters and sinks
         let video_convert = gst::ElementFactory::make("videoconvert").build()?;
-        elements.push(&video_convert);
         let video_rate = gst::ElementFactory::make("videorate").build()?;
-        elements.push(&video_rate);
         let video_scale = gst::ElementFactory::make("videoscale").build()?;
-        elements.push(&video_scale);
         let video_caps = gst::Caps::builder("video/x-raw")
             .field("format", &"I420")
             .field("width", &self.config.video_width)
@@ -343,15 +337,12 @@ impl RtmpStreamer {
         let video_capsfilter = gst::ElementFactory::make("capsfilter")
             .property("caps", &video_caps)
             .build()?;
-        elements.push(&video_capsfilter);
         let video_sink = gst::ElementFactory::make("appsink")
             .name("video_sink")
             .property("sync", &true)
             .property("emit-signals", &true)
-            // .property("max-buffers", &5u32)
             .property("drop", &true)
             .build()?;
-        elements.push(&video_sink);
 
         pipeline.add_many(&[
             &video_convert,
@@ -369,11 +360,8 @@ impl RtmpStreamer {
         ])?;
 
         let audio_convert = gst::ElementFactory::make("audioconvert").build()?;
-        elements.push(&audio_convert);
         let audio_rate = gst::ElementFactory::make("audiorate").build()?;
-        elements.push(&audio_rate);
         let audio_resample = gst::ElementFactory::make("audioresample").build()?;
-        elements.push(&audio_resample);
 
         let audio_caps = gst::Caps::builder("audio/x-raw")
             .field("format", &self.config.audio_sample_format)
@@ -384,15 +372,12 @@ impl RtmpStreamer {
         let audio_capsfilter = gst::ElementFactory::make("capsfilter")
             .property("caps", &audio_caps)
             .build()?;
-        elements.push(&audio_capsfilter);
         let audio_sink = gst::ElementFactory::make("appsink")
             .name("audio_sink")
             .property("sync", &true)
             .property("emit-signals", &true)
-            // .property("max-buffers", &1u32)
             .property("drop", &true)
             .build()?;
-        elements.push(&audio_sink);
 
         pipeline.add_many(&[
             &audio_convert,
