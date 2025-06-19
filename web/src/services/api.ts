@@ -35,7 +35,24 @@ class ApiService {
       }
       return config;
     });
+
+    // 添加响应拦截器，处理401错误
+    this.api.interceptors.response.use(
+      (response) => {
+        return response;
+      },
+      (error) => {
+        if (error.response && error.response.status === 401) {
+          this.clearToken();
+          const currentPath = window.location.pathname;
+          sessionStorage.setItem('redirectPath', currentPath);
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+    );
   }
+
 
   setBaseURL(url: string): void {
     this.api.defaults.baseURL = url;
@@ -69,7 +86,7 @@ class ApiService {
     return response.data.LoggedIn;
   }
 
-  // 切片相关API
+  // 切片��关API
   async listClips(): Promise<Clip[]> {
     const response = await this.api.get('/clips');
     return response.data;

@@ -140,6 +140,14 @@ impl PlaylistService {
         Ok(resp)
     }
 
+    pub async fn get_playlist_item_count(&self, playlist_id: i64) -> anyhow::Result<i64> {
+        let count = playlist_item::Entity::find()
+            .filter(playlist_item::Column::PlaylistId.eq(playlist_id))
+            .count(&self.db)
+            .await?;
+        Ok(count as i64)
+    }
+
     pub async fn get_active_clip_by_position(
         &self,
         user_id: i64,
@@ -215,13 +223,15 @@ impl PlaylistService {
             .await
             .map_err(|e| anyhow!("Failed to delete playlist item: {}", e))?;
 
-        let mut items = self
-            .get_playlist_item_by_playlist_id(user_id, playlist_id)
+        let mut items = playlist_item::Entity::find()
+            .filter(playlist_item::Column::PlaylistId.eq(playlist_id))
+            .order_by(playlist_item::Column::Position, Order::Asc)
+            .all(&tx)
             .await?;
 
         for (index, item) in items.iter_mut().enumerate() {
-            if item.0.position != index as i64 {
-                let mut model = item.0.clone().into_active_model();
+            if item.position != index as i64 {
+                let mut model = item.clone().into_active_model();
                 model.position = Set(index as i64);
                 model
                     .update(&tx)
