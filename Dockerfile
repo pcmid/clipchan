@@ -23,12 +23,18 @@ FROM debian:bookworm-slim AS final
 
 WORKDIR /
 
-RUN apt-get update && \
+RUN sed -i 's/Components: main/Components: main contrib non-free/' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && \
     apt-get install -y openssl ca-certificates nginx ffmpeg \
-    gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-    gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev && \
-    rm -rf /var/lib/apt/lists/*
+     gstreamer1.0-plugins-good \
+     gstreamer1.0-plugins-bad \
+     gstreamer1.0-plugins-ugly \
+     gstreamer1.0-libav \
+     gstreamer1.0-fdkaac && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean &&  \
+    apt-get autoclean && \
+    apt-get autoremove -y
 
 COPY --from=backend-builder /build/target/release/clipchan /
 COPY --from=frontend-builder /build/dist /var/www/html
