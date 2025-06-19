@@ -13,6 +13,8 @@ use tracing;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RtmpStreamerConfig {
+    pub buffer_time: u64, // in seconds
+
     // video
     pub video_height: i32,
     pub video_width: i32,
@@ -34,6 +36,7 @@ pub struct RtmpStreamerConfig {
 impl Default for RtmpStreamerConfig {
     fn default() -> Self {
         Self {
+            buffer_time: 15, // in seconds
             video_height: 720,
             video_width: 1280,
             video_framerate: 30,
@@ -144,13 +147,14 @@ impl RtmpStreamer {
         let muxer = gst::ElementFactory::make("flvmux")
             .name("mux")
             .property("streamable", &true)
-            .property("latency", &(15 * 1000u64))
+            .property("latency", &(self.config.buffer_time * 1000u64))
             .build()?;
         let queue_muxer = gst::ElementFactory::make("queue")
             .name("muxer_queue")
             .property_from_str("leaky", "no")
-            .property("max-size-buffers", &900u32)
-            .property("max-size-time", &15_000_000_000u64)
+            .property("max-size-bytes", &0u32)
+            .property("max-size-buffers", &0u32)
+            .property("max-size-time", &(self.config.buffer_time * 1_000_000_000))
             .build()?;
         let sink = gst::ElementFactory::make("rtmpsink")
             .property("location", &self.rtmp_url)

@@ -8,6 +8,8 @@ tmp_dir = "./data/temp"
 path = "data/clips"
 
 [stream]
+buffer_time = 15 # seconds
+
 video_height = 1080
 video_width = 1920
 video_framerate = 60
