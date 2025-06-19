@@ -93,7 +93,7 @@ impl LiveService {
                     .get_user_active_playlist(user_id)
                     .await
                     .map_err(|e| {
-                        tracing::warn!(
+                        tracing::error!(
                             "Failed to get user active playlists for {}: {}",
                             user_id,
                             e
@@ -101,61 +101,79 @@ impl LiveService {
                     })
                     .unwrap_or_default();
                 if playlists.is_empty() {
-                    tracing::info!("No active playlists found for user {}", user_id);
-                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                    continue;
+                    tracing::warn!("No active playlists found for user {}", user_id);
+                    return;
                 }
-                let index = 0;
                 for playlist in playlists {
-                    if stopped_clone.load(Ordering::SeqCst) {
-                        tracing::info!("Live stream stopped by user");
-                        return;
-                    }
-
                     if !playlist.is_active {
                         continue;
                     }
-                    let clip = playlist_svc
-                        .get_active_clip_by_position(user_id, playlist.id, index)
+
+                    let item_count = playlist_svc
+                        .get_playlist_item_count(playlist.id)
                         .await
-                        .map_err(async move |e| {
+                        .map_err(|e| {
                             tracing::warn!(
-                                "Failed to get playlist items for {}: {}",
+                                "Failed to get playlist item count for {}: {}",
                                 playlist.id,
                                 e
                             );
-                            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                         })
-                        .unwrap_or_default();
+                        .unwrap_or(0);
 
-                    if let Some(clip) = clip {
-                        let clip_uuid = clip.uuid.clone();
-                        let clip_title = clip.title.clone();
-                        let _clip_vup = clip.vup.clone();
-                        match storage.get_file(&format!("{}.mp4", clip_uuid)).await {
-                            Ok(file) => {
-                                streamer_clone
-                                    .update_title(&clip_title)
-                                    .await
-                                    .map_err(|e| {
-                                        tracing::error!("Failed to update title: {}", e);
-                                    })
-                                    .ok();
-                                streamer_clone
-                                    .push(file)
-                                    .await
-                                    .map_err(|e| {
-                                        tracing::error!("Failed to push clip to streamer: {}", e);
-                                    })
-                                    .ok();
-                            }
-                            Err(e) => {
-                                tracing::warn!("Failed to get file from storage: {}", e);
+                    if item_count == 0 {
+                        tracing::warn!("No items in playlist {} for user {}", playlist.id, user_id);
+                        continue;
+                    }
+
+                    for index in 0..item_count {
+                        if stopped_clone.load(Ordering::SeqCst) {
+                            tracing::info!("Live stream stopped for user {}", user_id);
+                            return;
+                        }
+                        let clip = playlist_svc
+                            .get_active_clip_by_position(user_id, playlist.id, index)
+                            .await
+                            .map_err(async move |e| {
+                                tracing::warn!(
+                                    "Failed to get playlist items for {}: {}",
+                                    playlist.id,
+                                    e
+                                );
                                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                            })
+                            .unwrap_or_default();
+
+                        if let Some(clip) = clip {
+                            let clip_uuid = clip.uuid.clone();
+                            let clip_title = clip.title.clone();
+                            let _clip_vup = clip.vup.clone();
+                            match storage.get_file(&format!("{}.mp4", clip_uuid)).await {
+                                Ok(file) => {
+                                    streamer_clone
+                                        .update_title(&clip_title)
+                                        .await
+                                        .map_err(|e| {
+                                            tracing::error!("Failed to update title: {}", e);
+                                        })
+                                        .ok();
+                                    streamer_clone
+                                        .push(file)
+                                        .await
+                                        .map_err(|e| {
+                                            tracing::error!(
+                                                "Failed to push clip to streamer: {}",
+                                                e
+                                            );
+                                        })
+                                        .ok();
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Failed to get file from storage: {}", e);
+                                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                                }
                             }
                         }
-                    } else {
-                        tracing::warn!("No available clip found in playlist {}", playlist.id);
                     }
                 }
             }
