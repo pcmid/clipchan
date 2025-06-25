@@ -60,4 +60,17 @@ impl LocalStorage {
         tracing::trace!("File opened successfully: {}", file_path.display());
         Ok(Box::new(file))
     }
+
+    pub(crate) async fn delete(&self, path: &str) -> Result<()> {
+        let file_path = self.path.join(path);
+        tracing::trace!("Deleting file from local storage: {}", file_path.display());
+        if !file_path.exists() {
+            return Ok(());
+        }
+        tokio::fs::remove_file(&file_path)
+            .await
+            .with_context(|| format!("Failed to delete file: {}", file_path.display()))?;
+        tracing::trace!("File deleted successfully: {}", file_path.display());
+        Ok(())
+    }
 }

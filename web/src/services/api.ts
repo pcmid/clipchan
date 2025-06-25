@@ -115,6 +115,10 @@ class ApiService {
     return response.data;
   }
 
+  async deleteClip(uuid: string): Promise<void> {
+    await this.api.delete(`/clip/${uuid}`);
+  }
+
   // 播放列表相关API
   async listPlaylists(): Promise<Playlist[]> {
     const response = await this.api.get('/playlists');
@@ -126,13 +130,9 @@ class ApiService {
     return response.data;
   }
 
-  async getActivePlaylist(): Promise<Playlist | null> {
-    try {
-      const response = await this.api.get('/playlists/active');
-      return response.data;
-    } catch (error) {
-      return null;
-    }
+  async getActivePlaylist(): Promise<Playlist> {
+    const response = await this.api.get('/playlists/active');
+    return response.data;
   }
 
   async getPlaylistById(id: number): Promise<Playlist> {

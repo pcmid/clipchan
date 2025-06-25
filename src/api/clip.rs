@@ -170,7 +170,7 @@ pub async fn update_clip(
 
     let mut clip: clip::Model = request.into();
     clip.uuid = uuid;
-    match state.clip_svc.update_clip(user, clip).await {
+    match state.clip_svc.update_clip(&user, clip).await {
         Ok(Some(clip)) => Ok(Json(ClipResponse::from(clip))),
         Ok(None) => Err((StatusCode::NOT_FOUND, "Clip not found".into())),
         Err(e) => {
@@ -188,16 +188,30 @@ pub async fn reviewed_clip(
     if uuid.is_nil() {
         return Err((StatusCode::BAD_REQUEST, "Invalid UUID".into()));
     }
-    let clip = clip::Model {
-        uuid,
-        ..Default::default()
-    };
 
-    match state.clip_svc.set_clip_reviewed(user, clip).await {
+    match state.clip_svc.set_clip_reviewed(&user, uuid).await {
         Ok(Some(clip)) => Ok(Json(ClipResponse::from(clip))),
         Ok(None) => Err((StatusCode::NOT_FOUND, "Clip not found".into())),
         Err(e) => {
             tracing::error!("Failed to mark clip as reviewed: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        }
+    }
+}
+
+pub async fn delete_clip(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<user::Model>,
+    Path(uuid): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    if uuid.is_nil() {
+        return Err((StatusCode::BAD_REQUEST, "Invalid UUID".into()));
+    }
+
+    match state.clip_svc.delete_clip(&user, uuid).await {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(e) => {
+            tracing::error!("Failed to delete clip: {}", e);
             Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
         }
     }

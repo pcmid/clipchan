@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use apalis::prelude::{Data, MemoryStorage, MessageQueue};
-use sea_orm::IntoActiveModel;
 use sea_orm::Set;
 use sea_orm::prelude::*;
+use sea_orm::{IntoActiveModel, Order, QueryOrder, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncRead;
 use tokio::process::Command;
@@ -15,8 +15,9 @@ use tracing::{debug, error, trace};
 use uuid::Uuid;
 
 use crate::core::entity::clip::{self, Entity as Clip};
-use crate::core::entity::user;
+use crate::core::entity::{playlist_item, user};
 use crate::core::storage::Storage;
+use crate::service::PlaylistService;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StatusResponse {
@@ -31,6 +32,8 @@ pub struct ClipService {
     db: DatabaseConnection,
     storage: Arc<Storage>,
     queue: Arc<Mutex<MemoryStorage<ProcessJob>>>,
+
+    playlist_svc: Arc<PlaylistService>,
 }
 
 impl ClipService {
@@ -39,12 +42,14 @@ impl ClipService {
         db: DatabaseConnection,
         storage: Arc<Storage>,
         queue: MemoryStorage<ProcessJob>,
+        playlist_svc: Arc<PlaylistService>,
     ) -> Self {
         Self {
             tmp_dir,
             db,
             storage,
             queue: Arc::new(Mutex::new(queue)),
+            playlist_svc,
         }
     }
 
@@ -188,13 +193,13 @@ impl ClipService {
 
     pub async fn get_clip_by_uuid(
         &self,
-        user_id: i64,
+        user: &user::Model,
         uuid: Uuid,
     ) -> anyhow::Result<Option<clip::Model>> {
         trace!("Fetching clip by UUID: {}", uuid.to_string());
         let clip = Clip::find()
             .filter(clip::Column::Uuid.eq(uuid))
-            .filter(clip::Column::UserId.eq(user_id))
+            .filter(clip::Column::UserId.eq(user.id))
             .one(&self.db)
             .await?;
 
@@ -221,17 +226,14 @@ impl ClipService {
 
     pub async fn update_clip(
         &self,
-        user: user::Model,
+        user: &user::Model,
         req: clip::Model,
     ) -> anyhow::Result<Option<clip::Model>> {
         trace!("Updating clip {} for {}", req.uuid.to_string(), user.id);
-        let clip = self
-            .get_clip_by_uuid(user.id, req.uuid)
-            .await
-            .map_err(|e| {
-                error!("Failed to verify clip ownership: {}", e);
-                anyhow!("Failed to verify clip ownership: {}", e)
-            })?;
+        let clip = self.get_clip_by_uuid(&user, req.uuid).await.map_err(|e| {
+            error!("Failed to verify clip ownership: {}", e);
+            anyhow!("Failed to verify clip ownership: {}", e)
+        })?;
 
         let clip = match clip {
             Some(c) => c,
@@ -254,27 +256,24 @@ impl ClipService {
 
     pub async fn set_clip_reviewed(
         &self,
-        user: user::Model,
-        req: clip::Model,
+        user: &user::Model,
+        uuid: Uuid,
     ) -> anyhow::Result<Option<clip::Model>> {
         trace!(
             "Setting clip {} for {} as reviewed",
-            req.uuid.to_string(),
+            uuid.to_string(),
             user.id
         );
 
-        let clip = self
-            .get_clip_by_uuid(user.id, req.uuid)
-            .await
-            .map_err(|e| {
-                error!("Failed to verify clip ownership: {}", e);
-                anyhow!("Failed to verify clip ownership: {}", e)
-            })?;
+        let clip = self.get_clip_by_uuid(&user, uuid).await.map_err(|e| {
+            error!("Failed to verify clip ownership: {}", e);
+            anyhow!("Failed to verify clip ownership: {}", e)
+        })?;
 
         let clip = match clip {
             Some(c) => c,
             None => {
-                error!("Clip {} not found for user ID: {}", req.uuid, user.id);
+                error!("Clip {} not found for user ID: {}", uuid, user.id);
                 return Ok(None);
             }
         };
@@ -294,6 +293,85 @@ impl ClipService {
         );
         Ok(Some(clip))
     }
+
+    pub async fn delete_clip(&self, user: &user::Model, uuid: Uuid) -> anyhow::Result<()> {
+        trace!("Deleting clip {} for user {}", uuid.to_string(), user.id);
+
+        let tx = self.db.begin().await.map_err(|e| {
+            error!("Failed to begin transaction: {}", e);
+            e
+        })?;
+
+        let clip = Clip::find()
+            .filter(clip::Column::Uuid.eq(uuid))
+            .filter(clip::Column::UserId.eq(user.id))
+            .one(&tx)
+            .await
+            .map_err(|e| {
+                error!("Failed to verify clip ownership: {}", e);
+                anyhow!("Failed to verify clip ownership: {}", e)
+            })?;
+
+        let clip = match clip {
+            Some(c) => c,
+            None => {
+                debug!("Clip {} not found for user ID: {}", uuid, user.id);
+                return Ok(());
+            }
+        };
+
+        let playlist_items = playlist_item::Entity::find()
+            .filter(playlist_item::Column::ClipUuid.eq(clip.uuid))
+            .all(&tx)
+            .await
+            .map_err(|e| {
+                error!("Failed to fetch playlist items for clip {}: {}", uuid, e);
+                e
+            })?;
+
+        for item in playlist_items {
+            let playlist_id = item.playlist_id;
+            let item_model = item.into_active_model();
+            item_model
+                .delete(&tx)
+                .await
+                .map_err(|e| anyhow!("Failed to delete playlist item: {}", e))?;
+            let mut items = playlist_item::Entity::find()
+                .filter(playlist_item::Column::PlaylistId.eq(playlist_id))
+                .order_by(playlist_item::Column::Position, Order::Asc)
+                .all(&tx)
+                .await?;
+
+            for (index, item) in items.iter_mut().enumerate() {
+                if item.position != index as i64 {
+                    let mut model = item.clone().into_active_model();
+                    model.position = Set(index as i64);
+                    model
+                        .update(&tx)
+                        .await
+                        .map_err(|e| anyhow!("Failed to update playlist item position: {}", e))?;
+                }
+            }
+        }
+
+        self.storage
+            .delete_file(&format!("{}.mp4", uuid.to_string()))
+            .await
+            .map_err(|e| {
+                error!("Failed to delete clip file from storage: {}", e);
+                e
+            })?;
+
+        let _ = clip.into_active_model().delete(&tx).await.map_err(|e| {
+            error!("Failed to delete clip from database: {}", e);
+            e
+        })?;
+
+        tx.commit().await?;
+        debug!("Clip {} deleted successfully", uuid.to_string());
+        Ok(())
+    }
+
     async fn transcode_and_normalize(
         input_path: &PathBuf,
         output_path: &PathBuf,

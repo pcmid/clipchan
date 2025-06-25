@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Table, Typography, Tag, Button, Space, message, Modal, Select } from 'antd';
+import { Table, Typography, Tag, Button, Space, message, Modal, Select, Popconfirm } from 'antd';
 import { useApi } from '../context/AppContext';
 import type { Clip, Playlist } from '../types';
-import { EditOutlined, CheckCircleOutlined, PlaySquareOutlined } from '@ant-design/icons';
+import { EditOutlined, CheckCircleOutlined, PlaySquareOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import type { ColumnsType } from 'antd/es/table';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -114,6 +115,17 @@ const ClipsPage: React.FC = () => {
     }
   };
 
+  const handleDelete = async (uuid: string) => {
+    try {
+      await api.deleteClip(uuid);
+      message.success('删除成功');
+      fetchClips();
+    } catch (error) {
+      console.error('删除失败:', error);
+      message.error('删除失败');
+    }
+  };
+
   const getStatusTag = (status: string) => {
     switch (status) {
       case 'processing':
@@ -133,7 +145,7 @@ const ClipsPage: React.FC = () => {
     return new Date(timestamp * 1000).toLocaleString();
   };
 
-  const columns = [
+  const columns: ColumnsType<Clip> = [
     {
       title: '标题',
       dataIndex: 'title',
@@ -164,7 +176,7 @@ const ClipsPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      render: (_: any, record: Clip) => (
+      render: (record: Clip) => (
         <Space size="middle">
           <Button
             icon={<EditOutlined />}
@@ -190,6 +202,20 @@ const ClipsPage: React.FC = () => {
           >
             添加到播放列表
           </Button>
+          <Popconfirm
+            title="确定删除这个切片吗？"
+            onConfirm={() => handleDelete(record.uuid)}
+            okText="是"
+            cancelText="否"
+          >
+            <Button
+              icon={<DeleteOutlined />}
+              size="small"
+              danger
+            >
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },
@@ -206,7 +232,7 @@ const ClipsPage: React.FC = () => {
       />
       <Modal
         title="添加到播放列表"
-        visible={isModalVisible}
+        open={isModalVisible}
         onCancel={handleModalCancel}
         footer={null}
       >

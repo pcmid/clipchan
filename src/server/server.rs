@@ -45,15 +45,17 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     })?;
 
     let queue = MemoryStorage::new();
+
+    let user_svc = Arc::new(UserService::new(db.clone()));
+    let playlist_svc = Arc::new(PlaylistService::new(db.clone()));
     let clip_svc = Arc::new(ClipService::new(
         tmp_dir,
         db.clone(),
         storage.clone(),
         queue.clone(),
+        playlist_svc.clone(),
     ));
 
-    let user_svc = Arc::new(UserService::new(db.clone()));
-    let playlist_svc = Arc::new(PlaylistService::new(db.clone()));
     let wbi = Arc::new(Mutex::new(
         bilive::wbi::WBI::new().await.map_err(|e| anyhow!(e))?,
     ));
@@ -111,7 +113,10 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         .route("/clips", get(api::clip::list_clip))
         .route("/upload", post(api::clip::upload))
         .layer(DefaultBodyLimit::max(config.max_file_size.as_u64() as usize))
-        .route("/clip/{uuid}", post(api::clip::update_clip))
+        .route(
+            "/clip/{uuid}",
+            post(api::clip::update_clip).delete(api::clip::delete_clip),
+        )
         .route("/clip/{uuid}/reviewed", post(api::clip::reviewed_clip))
         .route("/playlists", get(api::playlist::list_playlists))
         .route("/playlists", post(api::playlist::create_playlist))

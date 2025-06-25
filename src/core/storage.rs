@@ -50,6 +50,15 @@ impl Storage {
                 .context("Failed to retrieve file from local storage"),
         }
     }
+
+    pub async fn delete_file(&self, name: &str) -> anyhow::Result<()> {
+        match self {
+            Storage::Local(backend) => backend
+                .delete(&name)
+                .await
+                .with_context(|| format!("Failed to delete file: {}", name)),
+        }
+    }
 }
 
 impl Storage {
