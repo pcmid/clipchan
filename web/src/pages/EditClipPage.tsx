@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Form, Input, Button, message, Typography, Card, Spin } from 'antd';
+import { Form, message } from 'antd';
 import { useApi } from '../context/AppContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import type {ClipRequest} from '../types';
-
-const { Title } = Typography;
+import PageContainer from '../components/PageContainer/PageContainer';
+import ContentCard from '../components/ContentCard/ContentCard';
+import './EditClipPage.css';
 
 const EditClipPage: React.FC = () => {
   const [form] = Form.useForm();
@@ -68,6 +69,10 @@ const EditClipPage: React.FC = () => {
     }
   };
 
+  const handleCancel = () => {
+    navigate('/clips');
+  };
+
   // 处理回车键确认的函数
   const handleEnterKeyPress = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && !submitting && !loading) {
@@ -88,56 +93,79 @@ const EditClipPage: React.FC = () => {
     };
   }, [handleEnterKeyPress]);
 
+  const backButton = (
+    <button
+      className="form-btn secondary"
+      onClick={() => navigate('/clips')}
+    >
+      返回列表
+    </button>
+  );
+
   return (
-    <div>
-      <Title level={2}>编辑切片</Title>
-      <Card style={{ maxWidth: '600px', margin: '0 auto' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '30px' }}>
-            <Spin size="large" />
-            <p style={{ marginTop: '16px' }}>加载中...</p>
-          </div>
-        ) : (
-          <Form
-            form={form}
-            layout="vertical"
-            initialValues={{ title: '', vup: '', song: '' }}
-          >
-            <Form.Item
-              name="title"
-              label="标题"
-              rules={[{ required: true, message: '请输入标题' }]}
+    <PageContainer title="编辑切片" extra={backButton}>
+      <ContentCard loading={loading}>
+        {!loading && (
+          <div className="edit-form-card">
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={handleSubmit}
             >
-              <Input placeholder="请输入切片标题" />
-            </Form.Item>
+              <div className="form-group">
+                <label className="form-label">标题 *</label>
+                <Form.Item
+                  name="title"
+                  rules={[{ required: true, message: '请输入标题' }]}
+                >
+                  <input
+                    className="form-input required"
+                    placeholder="请输入切片标题"
+                  />
+                </Form.Item>
+              </div>
 
-            <Form.Item name="vup" label="VUP">
-              <Input placeholder="请输入VUP名称（可选）" />
-            </Form.Item>
+              <div className="form-group">
+                <label className="form-label">VUP</label>
+                <Form.Item name="vup">
+                  <input
+                    className="form-input"
+                    placeholder="请输入VUP名称（可选）"
+                  />
+                </Form.Item>
+              </div>
 
-            <Form.Item name="song" label="歌曲">
-              <Input placeholder="请输入歌曲名称（可选）" />
-            </Form.Item>
+              <div className="form-group">
+                <label className="form-label">歌曲</label>
+                <Form.Item name="song">
+                  <input
+                    className="form-input"
+                    placeholder="请输入歌曲名称（可选）"
+                  />
+                </Form.Item>
+              </div>
 
-            <Form.Item>
-              <Button
-                type="primary"
-                onClick={handleSubmit}
-                loading={submitting}
-              >
-                保存
-              </Button>
-              <Button
-                style={{ marginLeft: '10px' }}
-                onClick={() => navigate('/clips')}
-              >
-                取消
-              </Button>
-            </Form.Item>
-          </Form>
+              <div className="form-actions">
+                <button
+                  type="submit"
+                  className="form-btn primary"
+                  disabled={submitting}
+                >
+                  {submitting ? '保存中...' : '保存'}
+                </button>
+                <button
+                  type="button"
+                  className="form-btn secondary"
+                  onClick={handleCancel}
+                >
+                  取消
+                </button>
+              </div>
+            </Form>
+          </div>
         )}
-      </Card>
-    </div>
+      </ContentCard>
+    </PageContainer>
   );
 };
 

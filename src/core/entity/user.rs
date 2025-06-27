@@ -10,8 +10,18 @@ pub struct Model {
     pub uname: String,
     #[sea_orm(column_type = "Text")]
     pub session: String,
+    #[serde(default)]
+    pub is_admin: bool,
+    #[serde(default = "default_can_stream")]
+    pub can_stream: bool,
+    #[serde(default)]
+    pub is_disabled: bool,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+}
+
+fn default_can_stream() -> bool {
+    true
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

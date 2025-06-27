@@ -20,7 +20,7 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const location = useLocation();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, isAdmin, canStream, logout } = useAuth();
 
   // 使用items属性定义菜单项
   const menuItems: MenuProps['items'] = [
@@ -34,11 +34,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       icon: <UploadOutlined />,
       label: <Link to="/upload">上传切片</Link>,
     },
-    {
+    ...(canStream ? [{
       key: '/playlists',
       icon: <PlaySquareOutlined />,
       label: <Link to="/playlists">播放列表</Link>,
-    },
+    }] : []),
     {
       key: '/profile',
       icon: <UserOutlined />,
@@ -49,6 +49,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       icon: <SettingOutlined />,
       label: <Link to="/settings">系统设置</Link>,
     },
+    ...(isAdmin ? [{
+      key: '/admin',
+      icon: <SettingOutlined />,
+      label: <Link to="/admin">管理员</Link>,
+    }] : []),
   ];
 
   return (

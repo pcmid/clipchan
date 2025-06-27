@@ -1,362 +1,203 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  Typography,
-  Table,
-  Button,
-  Modal,
-  Form,
-  Input,
-  message,
-  Space,
-  Tabs,
-  Card,
-  Select,
-  Divider,
-  Tag,
-  Spin
-} from 'antd';
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  PlayCircleOutlined,
-  VideoCameraOutlined,
-  StopOutlined
-} from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Form, message, Modal, Table, Tabs } from 'antd';
 import { useApi } from '../context/AppContext';
-import type {Playlist, PlaylistRequest, PlaylistItem, Clip, LiveArea, RoomInfo} from '../types';
-
-const { Title, Text } = Typography;
-const { TextArea } = Input;
-const { Option } = Select;
+import type { Playlist, PlaylistItem, LiveArea, RoomInfo } from '../types';
+import { PlusOutlined, EditOutlined, DeleteOutlined, PlayCircleOutlined, VideoCameraOutlined, StopOutlined } from '@ant-design/icons';
+import PageContainer from '../components/PageContainer/PageContainer';
+import ContentCard from '../components/ContentCard/ContentCard';
+import './PlaylistsPage.css';
 
 const PlaylistsPage: React.FC = () => {
+  const [form] = Form.useForm();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [clips, setClips] = useState<Clip[]>([]);
   const [playlistItems, setPlaylistItems] = useState<PlaylistItem[]>([]);
   const [liveAreas, setLiveAreas] = useState<LiveArea[]>([]);
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [selectedArea, setSelectedArea] = useState<number | null>(null);
   const [selectedParentArea, setSelectedParentArea] = useState<number | null>(null);
-
   const [loading, setLoading] = useState(true);
-  const [liveLoading, setLiveLoading] = useState(true);
+  const [liveLoading, setLiveLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isLiveModalVisible, setIsLiveModalVisible] = useState(false);
-  const [activeTab, setActiveTab] = useState('1');
+  const [activeTab, setActiveTab] = useState("1");
   const [formMode, setFormMode] = useState<'add' | 'edit'>('add');
-  const [form] = Form.useForm();
-
+  const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const api = useApi();
 
-  // 获取播放列表
-  const fetchPlaylists = async () => {
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await api.listPlaylists();
-      setPlaylists(data);
+      const [playlistsData, liveAreasData] = await Promise.all([
+        api.listPlaylists(),
+        api.getLiveAreas(),
+      ]);
+
+      setPlaylists(playlistsData);
+      setLiveAreas(liveAreasData);
+
+      // 获取直播状态
+      try {
+        const roomInfoData = await api.getLiveStatus();
+        setRoomInfo(roomInfoData);
+      } catch (error) {
+        // 可能没有直播权限或其他错误，不影响主要功能
+        console.log('获取直播状态失败:', error);
+      }
     } catch (error) {
-      console.error('获取播放列表失败:', error);
-      message.error('获取播放列表失败');
+      console.error('加载数据失败:', error);
+      message.error('加载数据失败');
     } finally {
       setLoading(false);
     }
   };
 
-  // 获取切片列表
-  const fetchClips = async () => {
-    try {
-      const data = await api.listClips();
-      setClips(data.filter(clip => clip.status === 'reviewed')); // 只显示已审核的切片
-    } catch (error) {
-      console.error('获取切片失败:', error);
-      message.error('获取切片失败');
-    }
-  };
-
-  // 获取直播分区
-  const fetchLiveAreas = async () => {
-    try {
-      setLiveLoading(true);
-      const data = await api.getLiveAreas();
-      setLiveAreas(data);
-      if (data.length > 0) {
-        setSelectedParentArea(data[0].id);
-      }
-    } catch (error) {
-      console.error('获取直播分区失败:', error);
-      message.error('获取直播分区失败');
-    } finally {
-      setLiveLoading(false);
-    }
-  };
-
-  // 获取直播状态
-  const fetchLiveStatus = async () => {
-    try {
-      setLiveLoading(true);
-      const data = await api.getLiveStatus();
-      setRoomInfo(data);
-    } catch (error) {
-      console.error('获取直播状态失败:', error);
-      // 可能未开播，不显示错误
-      setRoomInfo(null);
-    } finally {
-      setLiveLoading(false);
-    }
-  };
-
-  // 获取播放列表项目
-  const fetchPlaylistItems = async (playlistId: number) => {
-    try {
-      const data = await api.getPlaylistItems(playlistId);
-      setPlaylistItems(data);
-    } catch (error) {
-      console.error('获取播放列表项目失败:', error);
-      message.error('获取播放列表项目失败');
-    }
-  };
-
-  useEffect(() => {
-    fetchPlaylists();
-    fetchClips();
-    fetchLiveAreas();
-    fetchLiveStatus();
-  }, []);
-
-  // 当选择的父分区改变时，重置子分区
-  useEffect(() => {
-    if (selectedParentArea !== null && liveAreas.length > 0) {
-      const parentArea = liveAreas.find(area => area.id === selectedParentArea);
-      if (parentArea && parentArea.list.length > 0) {
-        setSelectedArea(parseInt(parentArea.list[0].id));
-      } else {
-        setSelectedArea(null);
-      }
-    }
-  }, [selectedParentArea, liveAreas]);
-
-  // 打开新增/编辑播放列表模态框
-  const showModal = (mode: 'add' | 'edit', playlist?: Playlist) => {
+  const handleShowModal = (mode: 'add' | 'edit', playlist?: Playlist) => {
     setFormMode(mode);
+    setEditingPlaylist(playlist || null);
     if (mode === 'edit' && playlist) {
       form.setFieldsValue({
         name: playlist.name,
         description: playlist.description,
       });
-      setSelectedPlaylist(playlist);
     } else {
       form.resetFields();
-      setSelectedPlaylist(null);
     }
     setIsModalVisible(true);
-
-    // 添加回车键监听
-    setTimeout(() => {
-      document.addEventListener('keydown', handlePlaylistModalKeyDown);
-    }, 100);
   };
 
-  // 关闭模态框
-  const handleCancel = () => {
+  const handleModalCancel = () => {
     setIsModalVisible(false);
+    setEditingPlaylist(null);
     form.resetFields();
-    document.removeEventListener('keydown', handlePlaylistModalKeyDown);
   };
 
-  // 提交表单
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      const data: PlaylistRequest = {
-        name: values.name,
-        description: values.description,
-      };
 
       if (formMode === 'add') {
-        await api.createPlaylist(data);
-        message.success('创建播放列表成功');
-      } else if (formMode === 'edit' && selectedPlaylist) {
-        await api.updatePlaylist(selectedPlaylist.id, data);
-        message.success('更新播放列表成功');
+        await api.createPlaylist(values);
+        message.success('创建成功');
+      } else if (editingPlaylist) {
+        await api.updatePlaylist(editingPlaylist.id, values);
+        message.success('更新成功');
       }
 
-      fetchPlaylists();
       setIsModalVisible(false);
+      form.resetFields();
+      loadData();
     } catch (error) {
       console.error('操作失败:', error);
       message.error('操作失败');
     }
   };
 
-  // 删除播放列表
   const handleDelete = async (id: number) => {
-    Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除这个播放列表吗？',
-      onOk: async () => {
-        try {
-          await api.deletePlaylist(id);
-          message.success('删除成功');
-          fetchPlaylists();
-        } catch (error) {
-          console.error('删除失败:', error);
-          message.error('删除失败');
-        }
-      },
-    });
+    try {
+      await api.deletePlaylist(id);
+      message.success('删除成功');
+      loadData();
+    } catch (error) {
+      console.error('删除失败:', error);
+      message.error('删除失败');
+    }
   };
 
-  // 设置激活播放列表
   const handleSetActive = async (id: number) => {
     try {
       await api.setActivePlaylist(id);
-      message.success('设置活动播放列表成功');
-      fetchPlaylists();
+      message.success('设置为活动播放列表');
+      loadData();
     } catch (error) {
       console.error('设置失败:', error);
       message.error('设置失败');
     }
   };
 
-  // 取消激活播放列表
   const handleUnsetActive = async (id: number) => {
     try {
       await api.unsetActivePlaylist(id);
-      message.success('取消活动播放列表成功');
-      fetchPlaylists();
+      message.success('取消活动状态');
+      loadData();
     } catch (error) {
       console.error('操作失败:', error);
       message.error('操作失败');
     }
   };
 
-  // 查看播放列表项目
-  const handleViewItems = (playlist: Playlist) => {
-    setSelectedPlaylist(playlist);
-    fetchPlaylistItems(playlist.id);
-    setActiveTab('2');
-  };
-
-  // 将切片添加到播放列表
-  const handleAddToPlaylist = async (clipUuid: string) => {
-    if (!selectedPlaylist) {
-      message.error('请先选择一个播放列表');
-      return;
-    }
-
+  const handleViewItems = async (playlist: Playlist) => {
     try {
-      await api.addClipToPlaylist({
-        playlist_id: selectedPlaylist.id,
-        clip_uuid: clipUuid
-      });
-      message.success('添加成功');
-      fetchPlaylistItems(selectedPlaylist.id);
+      const items = await api.getPlaylistItems(playlist.id);
+      setPlaylistItems(items);
+      setSelectedPlaylist(playlist);
+      setActiveTab("2");
     } catch (error) {
-      console.error('添加失败:', error);
-      message.error('添加失败');
+      console.error('获取播放列表项目失败:', error);
+      message.error('获取播放列表项目失败');
     }
   };
 
-  // 从播放列表中移除切片
-  const handleRemoveFromPlaylist = async (clipUuid: string) => {
-    if (!selectedPlaylist) return;
-
-    try {
-      await api.removeClipFromPlaylist({
-        playlist_id: selectedPlaylist.id,
-        clip_uuid: clipUuid
-      });
-      message.success('移除成功');
-      fetchPlaylistItems(selectedPlaylist.id);
-    } catch (error) {
-      console.error('���除失败:', error);
-      message.error('移除失败');
-    }
-  };
-
-  // 重新排序播放列表项目
-  const handleReorderItem = async (itemId: number, newPosition: number) => {
-    if (!selectedPlaylist) return;
-
-    try {
-      await api.reorderPlaylistItem({
-        playlist_id: selectedPlaylist.id,
-        item_id: itemId,
-        new_position: newPosition
-      });
-      message.success('排序更新成功');
-      fetchPlaylistItems(selectedPlaylist.id);
-    } catch (error) {
-      console.error('排序更新失败:', error);
-      message.error('排序更新失败');
-    }
-  };
-
-  // 显示开播模态框
-  const showLiveModal = () => {
-    setIsLiveModalVisible(true);
-
-    // 添加回车键监听
-    setTimeout(() => {
-      document.addEventListener('keydown', handleLiveModalKeyDown);
-    }, 100);
-  };
-
-  // 关闭开播模态框
-  const handleLiveCancel = () => {
-    setIsLiveModalVisible(false);
-    document.removeEventListener('keydown', handleLiveModalKeyDown);
-  };
-
-  // 开始直播
   const handleStartLive = async () => {
     if (!selectedArea) {
-      message.error('请选择直播分区');
+      message.warning('请选择直播分区');
       return;
     }
 
     try {
+      setLiveLoading(true);
       await api.startLive({ area_id: selectedArea });
-      message.success('开播成功');
+      message.success('开始直播');
       setIsLiveModalVisible(false);
-      fetchLiveStatus();
+      loadData();
     } catch (error) {
-      console.error('开播失败:', error);
-      message.error('开播失败');
+      console.error('开始直播失败:', error);
+      message.error('开始直播失败');
+    } finally {
+      setLiveLoading(false);
     }
   };
 
-  // 停止直播
   const handleStopLive = async () => {
     try {
+      setLiveLoading(true);
       await api.stopLive();
-      message.success('停播成功');
-      setRoomInfo(null);
+      message.success('停止直播');
+      loadData();
     } catch (error) {
-      console.error('停播失败:', error);
-      message.error('停播失败');
+      console.error('停止直播失败:', error);
+      message.error('停止直播失败');
+    } finally {
+      setLiveLoading(false);
     }
   };
 
-  // 处理回车键确认的函数
-  const handleEnterKeyPress = useCallback((e: KeyboardEvent, submitFn: () => void) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submitFn();
-    }
-  }, []);
+  const handleParentAreaChange = (parentAreaId: number) => {
+    setSelectedParentArea(parentAreaId);
+    setSelectedArea(null);
+  };
 
-  // 播放列表模态框的键盘事件处理
-  const handlePlaylistModalKeyDown = useCallback((e: KeyboardEvent) => {
-    handleEnterKeyPress(e, handleSubmit);
-  }, [handleEnterKeyPress, handleSubmit]);
+  const handleAreaChange = (areaId: number) => {
+    setSelectedArea(areaId);
+  };
 
-  // 直播模态框的键盘事件处理
-  const handleLiveModalKeyDown = useCallback((e: KeyboardEvent) => {
-    handleEnterKeyPress(e, handleStartLive);
-  }, [handleEnterKeyPress, handleStartLive]);
+  const handleTabChange = (key: string) => {
+    setActiveTab(key);
+  };
+
+  const handleShowLiveModal = () => {
+    setIsLiveModalVisible(true);
+  };
+
+  const handleHideLiveModal = () => {
+    setIsLiveModalVisible(false);
+    setSelectedArea(null);
+    setSelectedParentArea(null);
+  };
 
   // 播放列表表格列
   const playlistColumns = [
@@ -364,14 +205,14 @@ const PlaylistsPage: React.FC = () => {
       title: '名称',
       dataIndex: 'name',
       key: 'name',
-      width: '30%',
+      width: '25%',
     },
     {
       title: '描述',
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
-      width: '40%',
+      width: '35%',
     },
     {
       title: '切片数量',
@@ -385,142 +226,57 @@ const PlaylistsPage: React.FC = () => {
       key: 'is_active',
       width: '10%',
       align: 'center' as const,
-      render: (_: any, record: Playlist) => (
-        record.is_active ? <Tag color="green">活动中</Tag> : null
+      render: (_: unknown, record: Playlist) => (
+        record.is_active ? <span className="playlist-status-tag status-active">活动中</span> : null
       ),
     },
     {
       title: '操作',
       key: 'action',
-      width: '40%',
-      render: (_: any, record: Playlist) => (
-        <Space size="small">
-          <Button
-            icon={<EditOutlined />}
-            size="small"
-            onClick={() => showModal('edit', record)}
+      width: '20%',
+      render: (_: unknown, record: Playlist) => (
+        <div className="action-buttons">
+          <button
+            className="action-btn"
+            onClick={() => handleShowModal('edit', record)}
           >
+            <EditOutlined />
             编辑
-          </Button>
-          <Button
-            icon={<DeleteOutlined />}
-            size="small"
-            danger
+          </button>
+          <button
+            className="action-btn danger"
             onClick={() => handleDelete(record.id)}
           >
+            <DeleteOutlined />
             删除
-          </Button>
-          <Button
-            icon={<PlayCircleOutlined />}
-            size="small"
-            type="primary"
+          </button>
+          <button
+            className="action-btn"
             onClick={() => handleViewItems(record)}
           >
+            <PlayCircleOutlined />
             查看
-          </Button>
+          </button>
           {record.is_active ? (
-            <Button
-              size="small"
+            <button
+              className="action-btn secondary"
               onClick={() => handleUnsetActive(record.id)}
             >
               取消活动
-            </Button>
+            </button>
           ) : (
-            <Button
-              size="small"
-              type="primary"
-              ghost
+            <button
+              className="action-btn success"
               onClick={() => handleSetActive(record.id)}
             >
               设为活动
-            </Button>
+            </button>
           )}
-        </Space>
+        </div>
       ),
     },
   ];
 
-  // 播放列表项目表格列
-  const playlistItemColumns = [
-    {
-      title: '位置',
-      dataIndex: 'position',
-      key: 'position',
-    },
-    {
-      title: '标题',
-      dataIndex: 'clip_title',
-      key: 'clip_title',
-    },
-    {
-      title: 'VUP',
-      dataIndex: 'clip_vup',
-      key: 'clip_vup',
-    },
-    {
-      title: '操��',
-      key: 'action',
-      render: (_: any, record: PlaylistItem) => (
-        <Space size="small">
-          <Button
-            size="small"
-            danger
-            onClick={() => handleRemoveFromPlaylist(record.clip_uuid)}
-          >
-            移除
-          </Button>
-          <Button
-            size="small"
-            disabled={record.position === 1}
-            onClick={() => handleReorderItem(record.id, record.position - 1)}
-          >
-            上移
-          </Button>
-          <Button
-            size="small"
-            disabled={record.position === playlistItems.length}
-            onClick={() => handleReorderItem(record.id, record.position + 1)}
-          >
-            下移
-          </Button>
-        </Space>
-      ),
-    },
-  ];
-
-  // 可用切片表格列
-  const availableClipsColumns = [
-    {
-      title: '标题',
-      dataIndex: 'title',
-      key: 'title',
-    },
-    {
-      title: 'VUP',
-      dataIndex: 'vup',
-      key: 'vup',
-    },
-    {
-      title: '歌曲',
-      dataIndex: 'song',
-      key: 'song',
-    },
-    {
-      title: '操作',
-      key: 'action',
-      render: (_: any, record: Clip) => (
-        <Button
-          size="small"
-          type="primary"
-          onClick={() => handleAddToPlaylist(record.uuid)}
-        >
-          添加到播放列表
-        </Button>
-      ),
-    },
-  ];
-
-  // 构建Tabs项目
   const getTabItems = () => {
     const items = [
       {
@@ -537,34 +293,26 @@ const PlaylistsPage: React.FC = () => {
       }
     ];
 
-    // 仅当选择了播放列表时才添加第二个标签页
     if (selectedPlaylist) {
       items.push({
         key: "2",
         label: "播放列表内容",
         children: (
-          <>
-            <div style={{ marginBottom: '16px' }}>
-              <Title level={4}>{selectedPlaylist.name}</Title>
-              <Text type="secondary">{selectedPlaylist.description}</Text>
+          <div>
+            <div className="playlist-header">
+              <h3>{selectedPlaylist.name}</h3>
+              <p>{selectedPlaylist.description}</p>
             </div>
-
-            <Divider orientation="left">当前内容</Divider>
-            <Table
-              columns={playlistItemColumns}
-              dataSource={playlistItems.map(item => ({ ...item, key: item.id }))}
-              pagination={{ pageSize: 10 }}
-            />
-
-            <Divider orientation="left">可添加的切片</Divider>
-            <Table
-              columns={availableClipsColumns}
-              dataSource={clips
-                .filter(clip => !playlistItems.some(item => item.clip_uuid === clip.uuid))
-                .map(clip => ({ ...clip, key: clip.uuid }))}
-              pagination={{ pageSize: 5 }}
-            />
-          </>
+            <div className="playlist-items">
+              {playlistItems.map(item => (
+                <div key={item.id} className="playlist-item">
+                  <span className="item-position">{item.position}</span>
+                  <span className="item-title">{item.clip_title}</span>
+                  <span className="item-vup">{item.clip_vup}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )
       });
     }
@@ -572,89 +320,71 @@ const PlaylistsPage: React.FC = () => {
     return items;
   };
 
+  const createButton = (
+    <button
+      className="action-btn primary"
+      onClick={() => handleShowModal('add')}
+    >
+      <PlusOutlined />
+      新建播放列表
+    </button>
+  );
+
+  const liveButton = roomInfo?.live_status === 1 ? (
+    <button
+      className="action-btn danger"
+      onClick={handleStopLive}
+      disabled={liveLoading}
+    >
+      <StopOutlined />
+      停止直播
+    </button>
+  ) : (
+    <button
+      className="action-btn success"
+      onClick={handleShowLiveModal}
+      disabled={liveLoading}
+    >
+      <VideoCameraOutlined />
+      开始直播
+    </button>
+  );
+
   return (
-    <div>
-      <Title level={2}>播放列表</Title>
+    <PageContainer title="播放列表管理" extra={<div style={{ display: 'flex', gap: '8px' }}>{createButton}{liveButton}</div>}>
+      <ContentCard>
+        <Tabs activeKey={activeTab} onChange={handleTabChange} items={getTabItems()} />
+      </ContentCard>
 
-      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between' }}>
-        <Space>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => showModal('add')}
-          >
-            新建播放列表
-          </Button>
-        </Space>
-
-        <Space>
-          {roomInfo && roomInfo.live_status === 1 ? (
-            <Button
-              danger
-              icon={<StopOutlined />}
-              onClick={handleStopLive}
-              loading={liveLoading}
-            >
-              停止直播
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              icon={<VideoCameraOutlined />}
-              onClick={showLiveModal}
-              loading={liveLoading}
-            >
-              开始直播
-            </Button>
-          )}
-        </Space>
-      </div>
-
-      {roomInfo && roomInfo.live_status === 1 && (
-        <Card style={{ marginBottom: '16px', backgroundColor: '#f6ffed', borderColor: '#b7eb8f' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <VideoCameraOutlined style={{ fontSize: '24px', color: '#52c41a', marginRight: '12px' }} />
-            <div>
-              <Text strong style={{ fontSize: '16px' }}>直播中</Text>
-              <div>直播间: {roomInfo.title}</div>
-              <div>分区: {roomInfo.area_name}</div>
-              <div>在线人数: {roomInfo.online}</div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      <Tabs
-        activeKey={activeTab}
-        onChange={(key) => {
-          setActiveTab(key);
-          // 当切换标签页时，如果没有选中播放列表，则不允许切换到播放列表内容标签
-          if (key === '2' && !selectedPlaylist) {
-            return;
-          }
-        }}
-        items={getTabItems()}
-      />
-
-      {/* 创建/编辑播放列表模态框 */}
+      {/* 编辑/新建播放列表模态框 */}
       <Modal
-        title={formMode === 'add' ? '创建播放列表' : '编辑播放列表'}
+        title={formMode === 'add' ? '新建播放列表' : '编辑播放列表'}
         open={isModalVisible}
-        onOk={handleSubmit}
-        onCancel={handleCancel}
+        onCancel={handleModalCancel}
+        footer={null}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
             name="name"
-            label="播放列表名称"
+            label="名称"
             rules={[{ required: true, message: '请输入播放列表名称' }]}
           >
-            <Input placeholder="请输入播放列表名称" />
+            <input className="form-input" placeholder="请输入播放列表名称" />
           </Form.Item>
-
-          <Form.Item name="description" label="描述">
-            <TextArea rows={4} placeholder="请输入播放列表描述（可选）" />
+          <Form.Item
+            name="description"
+            label="描述"
+          >
+            <textarea className="form-textarea" placeholder="请输入描述（可选）" />
           </Form.Item>
+          <div className="form-actions">
+            <button type="submit" className="form-btn primary">
+              {formMode === 'add' ? '创建' : '更新'}
+            </button>
+            <button type="button" className="form-btn secondary" onClick={handleModalCancel}>
+              取消
+            </button>
+          </div>
         </Form>
       </Modal>
 
@@ -662,55 +392,64 @@ const PlaylistsPage: React.FC = () => {
       <Modal
         title="开始直播"
         open={isLiveModalVisible}
-        onOk={handleStartLive}
-        onCancel={handleLiveCancel}
+        onCancel={handleHideLiveModal}
+        footer={null}
       >
-        {liveLoading ? (
-          <div style={{ textAlign: 'center', padding: '20px' }}>
-            <Spin />
-            <div style={{ marginTop: '10px' }}>加载中...</div>
-          </div>
-        ) : (
-          <Form layout="vertical">
-            <Form.Item
-              label="选择分区"
-              required
+        <div className="live-modal-content">
+          <div className="form-group">
+            <label>选择父分区</label>
+            <select
+              className="form-select"
+              value={selectedParentArea || ''}
+              onChange={(e) => handleParentAreaChange(Number(e.target.value))}
             >
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <Select
-                  style={{ width: '50%' }}
-                  placeholder="选择父分区"
-                  value={selectedParentArea}
-                  onChange={(value) => setSelectedParentArea(value)}
-                >
-                  {liveAreas.map(area => (
-                    <Option key={area.id} value={area.id}>{area.name}</Option>
-                  ))}
-                </Select>
+              <option value="">请选择父分区</option>
+              {liveAreas.map(area => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-                <Select
-                  style={{ width: '50%' }}
-                  placeholder="选择子分区"
-                  value={selectedArea}
-                  onChange={(value) => setSelectedArea(value)}
-                  disabled={!selectedParentArea}
-                >
-                  {selectedParentArea && liveAreas.find(area => area.id === selectedParentArea)?.list.map(subArea => (
-                    <Option key={subArea.id} value={parseInt(subArea.id)}>{subArea.name}</Option>
+          {selectedParentArea && (
+            <div className="form-group">
+              <label>选择子分区</label>
+              <select
+                className="form-select"
+                value={selectedArea || ''}
+                onChange={(e) => handleAreaChange(Number(e.target.value))}
+              >
+                <option value="">请选择子分区</option>
+                {liveAreas
+                  .find(area => area.id === selectedParentArea)?.list
+                  .map(subArea => (
+                    <option key={subArea.id} value={subArea.id}>
+                      {subArea.name}
+                    </option>
                   ))}
-                </Select>
-              </div>
-            </Form.Item>
-
-            <div style={{ marginTop: '10px' }}>
-              <Text type="secondary">
-                注意: 开始直播前，请确保已在"播放列表"标签中设置了活动播放列表。
-              </Text>
+              </select>
             </div>
-          </Form>
-        )}
+          )}
+
+          <div className="form-actions">
+            <button
+              className="form-btn primary"
+              onClick={handleStartLive}
+              disabled={!selectedArea || liveLoading}
+            >
+              {liveLoading ? '开始中...' : '开始直播'}
+            </button>
+            <button
+              className="form-btn secondary"
+              onClick={handleHideLiveModal}
+            >
+              取消
+            </button>
+          </div>
+        </div>
       </Modal>
-    </div>
+    </PageContainer>
   );
 };
 

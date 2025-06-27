@@ -1,18 +1,17 @@
 use bilive::bapi::Account;
 use bilive::session::Session;
-use sea_orm::{ActiveModelTrait, IntoActiveModel};
-use sea_orm::{ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use crate::core::entity::user;
 use crate::core::jwt;
+use crate::data::UserData;
 
 pub struct UserService {
-    db: DatabaseConnection,
+    user_data: UserData,
 }
 
 impl UserService {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+    pub fn new(user_data: UserData) -> Self {
+        Self { user_data }
     }
 
     pub async fn get_login_qrcode(&self) -> anyhow::Result<bilive::bapi::QrCodeInfo> {
@@ -51,77 +50,25 @@ impl UserService {
         account: &Account,
         session: &Session,
     ) -> anyhow::Result<user::Model> {
-        let existing_user = user::Entity::find()
-            .filter(user::Column::Mid.eq(account.mid))
-            .one(&self.db)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to query database: {}", e))?;
-
         let session_data = serde_json::to_string(&session)
             .map_err(|e| anyhow::anyhow!("Failed to serialize session data: {}", e))?;
 
-        let now: sea_orm::prelude::DateTimeWithTimeZone = chrono::Utc::now().into();
-
-        match existing_user {
-            Some(user) => {
-                let mut user_active: user::ActiveModel = user.into();
-                user_active.uname = Set(account.uname.clone());
-                user_active.session = Set(session_data);
-                user_active.updated_at = Set(now);
-
-                let updated_user = user_active
-                    .update(&self.db)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to update user in database: {}", e))?;
-                Ok(updated_user)
-            }
-            None => {
-                // 创建新用户
-                let user_active = user::ActiveModel {
-                    id: ActiveValue::NotSet,
-                    mid: Set(account.mid as i64),
-                    uname: Set(account.uname.clone()),
-                    session: Set(session_data),
-                    created_at: Set(now.clone()),
-                    updated_at: Set(now),
-                };
-
-                let new_user = user_active
-                    .insert(&self.db)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to insert user into database: {}", e))?;
-                Ok(new_user)
-            }
-        }
+        self.user_data
+            .save_user_info(account.mid as i64, account.uname.clone(), session_data)
+            .await
     }
 
     pub async fn clean_session(&self, user: &user::Model) -> anyhow::Result<()> {
         tracing::trace!("Cleaning session for user {:?}", user);
-        let mut user_active = user.clone().into_active_model();
-        user_active.session = Set("".to_string());
-        user_active
-            .update(&self.db)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to clean session in database: {}", e))?;
-        Ok(())
+        self.user_data.clean_session(user).await
     }
 
     pub async fn _get_user_by_id(&self, id: i64) -> anyhow::Result<Option<user::Model>> {
-        let user = user::Entity::find()
-            .filter(user::Column::Id.eq(id))
-            .one(&self.db)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to query user from database: {}", e))?;
-        Ok(user)
+        self.user_data._get_user_by_id(id).await
     }
 
     pub async fn get_user_by_mid(&self, mid: i64) -> anyhow::Result<Option<user::Model>> {
-        let user = user::Entity::find()
-            .filter(user::Column::Mid.eq(mid))
-            .one(&self.db)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to query user from database: {}", e))?;
-        Ok(user)
+        self.user_data.get_user_by_mid(mid).await
     }
 
     pub async fn get_session(&self, user: &user::Model) -> anyhow::Result<Session> {
@@ -172,5 +119,45 @@ impl UserService {
             .map_err(|e| anyhow::anyhow!("Failed to create JWT token: {}", e))?;
 
         Ok(token)
+    }
+
+    // 管理员功能
+    pub async fn list_all_users(&self) -> anyhow::Result<Vec<user::Model>> {
+        self.user_data.list_all_users().await
+    }
+
+    pub async fn update_user_permissions(
+        &self,
+        user_id: i64,
+        is_admin: Option<bool>,
+        can_stream: Option<bool>,
+        is_disabled: Option<bool>,
+    ) -> anyhow::Result<user::Model> {
+        self.user_data
+            .update_user_permissions(user_id, is_admin, can_stream, is_disabled)
+            .await
+    }
+
+    pub async fn check_user_permissions(&self, user: &user::Model) -> anyhow::Result<()> {
+        if user.is_disabled {
+            return Err(anyhow::anyhow!("User account is disabled"));
+        }
+        Ok(())
+    }
+
+    pub async fn check_admin_permissions(&self, user: &user::Model) -> anyhow::Result<()> {
+        self.check_user_permissions(user).await?;
+        if !user.is_admin {
+            return Err(anyhow::anyhow!("Admin privileges required"));
+        }
+        Ok(())
+    }
+
+    pub async fn check_stream_permissions(&self, user: &user::Model) -> anyhow::Result<()> {
+        self.check_user_permissions(user).await?;
+        if !user.can_stream {
+            return Err(anyhow::anyhow!("Streaming not allowed for this user"));
+        }
+        Ok(())
     }
 }

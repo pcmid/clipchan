@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Table, Typography, Tag, Button, Space, message, Modal, Select, Popconfirm } from 'antd';
-import { useApi } from '../context/AppContext';
+import { message, Modal, Table, Popconfirm } from 'antd';
+import {useApi, useAuth} from '../context/AppContext';
+import { useNavigate } from 'react-router-dom';
 import type { Clip, Playlist } from '../types';
 import { EditOutlined, CheckCircleOutlined, PlaySquareOutlined, DeleteOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
-
-const { Title } = Typography;
-const { Option } = Select;
+import PageContainer from '../components/PageContainer/PageContainer';
+import ContentCard from '../components/ContentCard/ContentCard';
+import './ClipsPage.css';
 
 const ClipsPage: React.FC = () => {
   const [clips, setClips] = useState<Clip[]>([]);
@@ -19,6 +19,7 @@ const ClipsPage: React.FC = () => {
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const api = useApi();
   const navigate = useNavigate();
+  const { isAdmin, canStream } = useAuth();
 
   const fetchClips = async () => {
     try {
@@ -33,10 +34,6 @@ const ClipsPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchClips();
-  }, []);
-
   const fetchPlaylists = async () => {
     try {
       setLoadingPlaylists(true);
@@ -50,28 +47,39 @@ const ClipsPage: React.FC = () => {
     }
   };
 
-  // 处理回车键确认的函数
-  const handleEnterKeyPress = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && isModalVisible && selectedPlaylistId && !loadingPlaylists) {
-      e.preventDefault();
-      handleAddToPlaylist();
-    }
-  }, [isModalVisible, selectedPlaylistId, loadingPlaylists]);
-
-  // 添加和移除键盘事件监听
   useEffect(() => {
-    if (isModalVisible) {
-      document.addEventListener('keydown', handleEnterKeyPress);
-    }
-    return () => {
-      document.removeEventListener('keydown', handleEnterKeyPress);
-    };
-  }, [isModalVisible, handleEnterKeyPress]);
+    fetchClips();
+  }, []);
 
-  const showAddToPlaylistModal = (uuid: string) => {
+  // Handle review clip action
+  const handleReviewClip = async (uuid: string) => {
+    try {
+      await api.reviewedClip(uuid);
+      message.success('标记为已审核');
+      fetchClips();
+    } catch (error) {
+      console.error('标记审核失败:', error);
+      message.error('标记审核失败');
+    }
+  };
+
+  // Handle add to playlist action
+  const handleAddToPlaylistClick = (uuid: string) => {
     setCurrentClipUuid(uuid);
     fetchPlaylists();
     setIsModalVisible(true);
+  };
+
+  // Handle delete clip action
+  const handleDeleteClip = async (uuid: string) => {
+    try {
+      await api.deleteClip(uuid);
+      message.success('删除成功');
+      fetchClips();
+    } catch (error) {
+      console.error('删除失败:', error);
+      message.error('删除失败');
+    }
   };
 
   const handleModalCancel = () => {
@@ -99,45 +107,36 @@ const ClipsPage: React.FC = () => {
     }
   };
 
-  const handleEdit = (uuid: string) => {
-    navigate(`/clip/edit/${uuid}`);
-    message.info('正在编辑切片');
-  };
-
-  const handleReview = async (uuid: string) => {
-    try {
-      await api.reviewedClip(uuid);
-      message.success('标记为已审核');
-      fetchClips();
-    } catch (error) {
-      console.error('标记审核失败:', error);
-      message.error('标记审核失败');
+  // 处理回车键确认的函数
+  const handleEnterKeyPress = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey && isModalVisible && selectedPlaylistId && !loadingPlaylists) {
+      e.preventDefault();
+      handleAddToPlaylist();
     }
-  };
+  }, [isModalVisible, selectedPlaylistId, loadingPlaylists]);
 
-  const handleDelete = async (uuid: string) => {
-    try {
-      await api.deleteClip(uuid);
-      message.success('删除成功');
-      fetchClips();
-    } catch (error) {
-      console.error('删除失败:', error);
-      message.error('删除失败');
+  // 添加和移除键盘事件监听
+  useEffect(() => {
+    if (isModalVisible) {
+      document.addEventListener('keydown', handleEnterKeyPress);
     }
-  };
+    return () => {
+      document.removeEventListener('keydown', handleEnterKeyPress);
+    };
+  }, [isModalVisible, handleEnterKeyPress]);
 
   const getStatusTag = (status: string) => {
     switch (status) {
       case 'processing':
-        return <Tag color="processing">处理中</Tag>;
+        return <span className="status-tag status-processing">处理中</span>;
       case 'failed':
-        return <Tag color="error">失败</Tag>;
+        return <span className="status-tag status-failed">失败</span>;
       case 'reviewing':
-        return <Tag color="success">审核中</Tag>;
+        return <span className="status-tag status-reviewing">审核中</span>;
       case 'reviewed':
-        return <Tag color="blue">已审核</Tag>;
+        return <span className="status-tag status-reviewed">已审核</span>;
       default:
-        return <Tag>{status}</Tag>;
+        return <span className="status-tag">{status}</span>;
     }
   };
 
@@ -150,113 +149,136 @@ const ClipsPage: React.FC = () => {
       title: '标题',
       dataIndex: 'title',
       key: 'title',
+      width: '25%',
     },
     {
       title: 'VUP',
       dataIndex: 'vup',
       key: 'vup',
+      width: '15%',
     },
     {
       title: '歌曲',
       dataIndex: 'song',
       key: 'song',
+      width: '15%',
     },
     {
       title: '上传时间',
       dataIndex: 'upload_time',
       key: 'upload_time',
+      width: '15%',
       render: (text: number) => formatDate(text),
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: '10%',
       render: (text: string) => getStatusTag(text),
     },
     {
       title: '操作',
       key: 'action',
+      width: '20%',
       render: (record: Clip) => (
-        <Space size="middle">
-          <Button
-            icon={<EditOutlined />}
-            size="small"
-            onClick={() => handleEdit(record.uuid)}
+        <div className="action-buttons">
+          {(record.status!="reviewed" && isAdmin ) && (
+          <button
+            className="action-btn"
+            onClick={() => navigate(`/clip/edit/${record.uuid}`)}
           >
+            <EditOutlined />
             编辑
-          </Button>
-          {(record.status === 'reviewing') && (
-            <Button
-              icon={<CheckCircleOutlined />}
-              size="small"
-              type="primary"
-              onClick={() => handleReview(record.uuid)}
-            >
-              通过审核
-            </Button>
+          </button>
           )}
-          <Button
-            icon={<PlaySquareOutlined />}
-            size="small"
-            onClick={() => showAddToPlaylistModal(record.uuid)}
+          { (isAdmin) && (record.status === 'reviewing') && (
+            <button
+              className="action-btn success"
+              onClick={() => handleReviewClip(record.uuid)}
+            >
+              <CheckCircleOutlined />
+              通过审核
+            </button>
+          )}
+          { (canStream && record.status === 'reviewed') && (
+          <button
+            className="action-btn"
+            onClick={() => handleAddToPlaylistClick(record.uuid)}
           >
+            <PlaySquareOutlined />
             添加到播放列表
-          </Button>
+          </button>
+              )}
           <Popconfirm
             title="确定删除这个切片吗？"
-            onConfirm={() => handleDelete(record.uuid)}
+            onConfirm={() => handleDeleteClip(record.uuid)}
             okText="是"
             cancelText="否"
           >
-            <Button
-              icon={<DeleteOutlined />}
-              size="small"
-              danger
-            >
+            <button className="action-btn danger">
+              <DeleteOutlined />
               删除
-            </Button>
+            </button>
           </Popconfirm>
-        </Space>
+        </div>
       ),
     },
   ];
 
+  const refreshButton = (
+    <button
+      className="action-btn"
+      onClick={() => fetchClips()}
+    >
+      刷新
+    </button>
+  );
+
   return (
-    <div>
-      <Title level={2}>我的切片</Title>
-      <Table
-        columns={columns}
-        dataSource={clips.map(clip => ({ ...clip, key: clip.uuid }))}
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-      />
+    <PageContainer title="我的切片" extra={refreshButton}>
+      <ContentCard>
+        <div className="clips-table-container">
+          <Table
+            columns={columns}
+            dataSource={clips.map(clip => ({ ...clip, key: clip.uuid }))}
+            loading={loading}
+            pagination={{ pageSize: 10 }}
+          />
+        </div>
+      </ContentCard>
+
+      {/* 添加到播放列表的模态框 */}
       <Modal
         title="添加到播放列表"
         open={isModalVisible}
         onCancel={handleModalCancel}
         footer={null}
       >
-        <Select
-          placeholder="选择播放列表"
-          onChange={value => setSelectedPlaylistId(value)}
-          style={{ width: '100%' }}
-          loading={loadingPlaylists}
-        >
-          {playlists.map(playlist => (
-            <Option key={playlist.id} value={playlist.id}>
-              {playlist.name}
-            </Option>
-          ))}
-        </Select>
-        <Button
-          type="primary"
-          onClick={handleAddToPlaylist}
-          style={{ marginTop: 16, width: '100%' }}
-        >
-          添加
-        </Button>
+        <div className="modal-content">
+          <select
+            className="modal-select"
+            value={selectedPlaylistId || ''}
+            onChange={(e) => setSelectedPlaylistId(Number(e.target.value))}
+            disabled={loadingPlaylists}
+          >
+            <option value="">选择播放列表</option>
+            {playlists.map(playlist => (
+              <option key={playlist.id} value={playlist.id}>
+                {playlist.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="modal-btn"
+            onClick={handleAddToPlaylist}
+            disabled={!selectedPlaylistId || loadingPlaylists}
+          >
+            添加
+          </button>
+        </div>
       </Modal>
-    </div>
+    </PageContainer>
   );
 };
 

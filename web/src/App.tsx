@@ -19,9 +19,12 @@ import EditClipPage from './pages/EditClipPage';
 import PlaylistsPage from './pages/PlaylistsPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
+import AdminPage from "./pages/AdminPage.tsx";
 
 // 布局组件
 import MainLayout from './components/MainLayout';
+import AdminRoute from './components/AdminRoute/AdminRoute';
+import SteamRoute from './components/StreamRoute/StreamRoute';
 
 // 受保护的路由组件
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -73,7 +76,9 @@ const App: React.FC = () => {
               path="/playlists"
               element={
                 <ProtectedRoute>
-                  <PlaylistsPage />
+                  <SteamRoute>
+                    <PlaylistsPage />
+                  </SteamRoute>
                 </ProtectedRoute>
               }
             />
@@ -96,6 +101,16 @@ const App: React.FC = () => {
               }
             />
 
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminRoute>
+                    <AdminPage />
+                  </AdminRoute>
+                </ProtectedRoute>
+              }
+            />
             <Route path="/" element={<Navigate to="/clips" replace />} />
             <Route path="*" element={<Navigate to="/clips" replace />} />
           </Routes>

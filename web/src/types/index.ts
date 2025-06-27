@@ -20,6 +20,23 @@ export interface QrCodeInfo {
   svg: string;
 }
 
+// 用户权限相关类型
+export interface User {
+  id: number;
+  mid: number;
+  uname: string;
+  is_admin: boolean;
+  can_stream: boolean;
+  is_disabled: boolean;
+  created_at: string;
+}
+
+export interface UpdateUserPermissionsRequest {
+  is_admin?: boolean;
+  can_stream?: boolean;
+  is_disabled?: boolean;
+}
+
 // 切片相关类型
 export interface Clip {
   uuid: string;

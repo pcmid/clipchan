@@ -58,6 +58,9 @@ impl LiveService {
     }
 
     pub async fn start_live(&self, user: &user::Model, area_id: i32) -> anyhow::Result<()> {
+        // 检查用户是否有开播权限
+        self.user_svc.check_stream_permissions(user).await?;
+
         let mid = user.mid as u64;
         let session = self.user_svc.get_session_and_refresh(user).await?;
         let live = bilive::live::Live::new(session, self.wbi.clone());

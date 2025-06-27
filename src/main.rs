@@ -8,6 +8,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 mod api;
 mod config;
 mod core;
+mod data;
 mod server;
 mod service;
 mod storage;

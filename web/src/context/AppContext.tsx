@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import ApiService from '../services/api';
-import type { Account, AppConfig, LoginInfo } from '../types';
+import type { Account, AppConfig, LoginInfo, User } from '../types';
 
 // 默认配置
 const defaultConfig: AppConfig = {
@@ -9,9 +9,14 @@ const defaultConfig: AppConfig = {
 
 interface AuthContextValue {
   isAuthenticated: boolean;
+  isAdmin: boolean;
+  canStream: boolean;
+  isDisabled: boolean;
   account: Account | null;
+  currentUser: User | null;
   login: (loginInfo: LoginInfo) => void;
   logout: () => void;
+  refreshUserInfo: () => Promise<void>;
 }
 
 interface ConfigContextValue {
@@ -46,15 +51,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [config, setConfig] = useState<AppConfig>(loadConfig());
   const [account, setAccount] = useState<Account | null>(loadUserInfo().account);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [api] = useState<ApiService>(new ApiService(config.apiBaseUrl));
 
-  // 初始化时设置令牌
+  // 获取当前用户详细信息
+  const refreshUserInfo = async () => {
+    if (!account) {
+      setCurrentUser(null);
+      return;
+    }
+
+    try {
+      const userInfo = await api.getCurrentUser();
+      setCurrentUser(userInfo);
+    } catch (error) {
+      console.error('获取用户信息失败:', error);
+      // 如果获取用户信息失败，可能是token过期，执行登出
+      logout();
+    }
+  };
+
+  // 初始化时设置令牌并获取用户信息
   useEffect(() => {
     const { token } = loadUserInfo();
     if (token) {
       api.setToken(token);
+      // 如果有token且有account，获取详细用户信息
+      if (account) {
+        refreshUserInfo();
+      }
     }
-  }, [api]);
+  }, [api, account]);
 
   // 更新配置
   const updateConfig = (newConfig: Partial<AppConfig>) => {
@@ -74,11 +101,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     api.setToken(loginInfo.token);
     localStorage.setItem('account', JSON.stringify(loginInfo.account));
     localStorage.setItem('token', loginInfo.token);
+    // 登录后立即获取用户详细信息
+    setTimeout(() => {
+      refreshUserInfo();
+    }, 100);
   };
 
   // 登出
   const logout = () => {
     setAccount(null);
+    setCurrentUser(null);
     api.clearToken();
     localStorage.removeItem('account');
     localStorage.removeItem('token');
@@ -86,9 +118,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const authContextValue: AuthContextValue = {
     isAuthenticated: !!account,
+    isAdmin: currentUser?.is_admin || false,
+    canStream: currentUser?.can_stream || false,
+    isDisabled: currentUser?.is_disabled || false,
     account,
+    currentUser,
     login,
     logout,
+    refreshUserInfo,
   };
 
   const configContextValue: ConfigContextValue = {

@@ -1,0 +1,154 @@
+.clips-page {
+  min-height: 100vh;
+  background: #f5f6fa;
+  padding: 20px;
+}
+
+.clips-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.clips-title {
+  color: #2c3e50;
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.clips-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.clips-table-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  min-width: 60px;
+}
+
+.status-processing {
+  background: #3498db;
+  color: white;
+}
+
+.status-failed {
+  background: #e74c3c;
+  color: white;
+}
+
+.status-reviewing {
+  background: #00b894;
+  color: white;
+}
+
+.status-reviewed {
+  background: #74b9ff;
+  color: white;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.action-btn.danger {
+  background: #e74c3c;
+}
+
+.action-btn.danger:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+.action-btn.success {
+  background: #00b894;
+}
+
+.action-btn.success:hover:not(:disabled) {
+  background: #00a085;
+}
+
+.modal-content {
+  padding: 16px 0;
+}
+
+.modal-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.modal-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.modal-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .clips-page {
+    padding: 16px;
+  }
+
+  .clips-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .clips-title {
+    text-align: center;
+    font-size: 24px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+}

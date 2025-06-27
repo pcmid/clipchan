@@ -12,7 +12,9 @@ import type {
     LiveArea,
     StartLiveRequest,
     RoomInfo,
-    ServerConfig
+    ServerConfig,
+    User,
+    UpdateUserPermissionsRequest
 } from '../types';
 
 class ApiService {
@@ -92,16 +94,24 @@ class ApiService {
     return response.data;
   }
 
-  async uploadClip(file: File, metadata: ClipRequest): Promise<Clip> {
+  async uploadClip(file: File, metadata: ClipRequest, onProgress?: (progress: number) => void): Promise<Clip> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('metadata', JSON.stringify(metadata));
 
+
     const response = await this.api.post('/upload', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': 'multipart/form-data'
       },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percentCompleted);
+        }
+      }
     });
+
     return response.data;
   }
 
@@ -190,6 +200,22 @@ class ApiService {
 
   async getLiveStatus(): Promise<RoomInfo> {
     const response = await this.api.get('/live/status');
+    return response.data;
+  }
+
+  // 用户管理相关API
+  async getCurrentUser(): Promise<User> {
+    const response = await this.api.get('/user/me');
+    return response.data;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    const response = await this.api.get('/admin/users');
+    return response.data;
+  }
+
+  async updateUserPermissions(userId: number, permissions: UpdateUserPermissionsRequest): Promise<User> {
+    const response = await this.api.post(`/admin/users/${userId}/permissions`, permissions);
     return response.data;
   }
 }

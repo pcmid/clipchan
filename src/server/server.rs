@@ -14,6 +14,7 @@ use tower_http::cors::CorsLayer;
 use crate::api;
 use crate::config::Config;
 use crate::core::storage::Storage;
+use crate::data::{ClipData, PlaylistData, UserData};
 use crate::server::auth;
 use crate::service::{clip::process_clip, *};
 
@@ -46,14 +47,19 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 
     let queue = MemoryStorage::new();
 
-    let user_svc = Arc::new(UserService::new(db.clone()));
-    let playlist_svc = Arc::new(PlaylistService::new(db.clone()));
+    // Create data layer instances
+    let user_data = UserData::new(db.clone());
+    let clip_data = ClipData::new(db.clone());
+    let playlist_data = PlaylistData::new(db.clone());
+
+    // Create service layer instances with data layer dependencies
+    let user_svc = Arc::new(UserService::new(user_data));
+    let playlist_svc = Arc::new(PlaylistService::new(playlist_data));
     let clip_svc = Arc::new(ClipService::new(
         tmp_dir,
-        db.clone(),
+        clip_data,
         storage.clone(),
         queue.clone(),
-        playlist_svc.clone(),
     ));
 
     let wbi = Arc::new(Mutex::new(
@@ -105,7 +111,6 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
                 })
             }),
         )
-        // .route("/configs", get(get_config))
         .route("/user/login/qrcode", get(api::user::get_login_qrcode))
         .route("/user/login/check", get(api::user::check_bilibili_login));
 
@@ -117,7 +122,12 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
             "/clip/{uuid}",
             post(api::clip::update_clip).delete(api::clip::delete_clip),
         )
-        .route("/clip/{uuid}/reviewed", post(api::clip::reviewed_clip))
+        // 用户信息接口
+        .route("/user/me", get(api::admin::get_current_user))
+        // 管理员接口
+        .route_layer(middleware::from_fn_with_state(state.clone(), auth::auth));
+
+    let live_routes = Router::new()
         .route("/playlists", get(api::playlist::list_playlists))
         .route("/playlists", post(api::playlist::create_playlist))
         .route("/playlists/active", get(api::playlist::get_active_playlist))
@@ -148,11 +158,30 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         .route("/live/start", post(api::live::start_live))
         .route("/live/stop", post(api::live::stop_live))
         .route("/live/status", get(api::live::get_live_status))
-        .route_layer(middleware::from_fn_with_state(state.clone(), auth::auth));
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::can_stream,
+        ))
+        .layer(middleware::from_fn_with_state(state.clone(), auth::auth));
+
+    let admin_routes = Router::new()
+        .route("/clip/{uuid}/reviewed", post(api::clip::reviewed_clip))
+        .route("/admin/users", get(api::admin::list_all_users))
+        .route(
+            "/admin/users/{user_id}/permissions",
+            post(api::admin::update_user_permissions),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::auth_admin,
+        ))
+        .layer(middleware::from_fn_with_state(state.clone(), auth::auth));
 
     // 合并路由
     let app = public_routes
         .merge(protected_routes)
+        .merge(live_routes)
+        .merge(admin_routes)
         .layer(cors.clone())
         .with_state(state);
 
