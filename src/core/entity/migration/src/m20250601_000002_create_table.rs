@@ -26,11 +26,7 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default("pending".to_owned()),
                     )
-                    .col(
-                        big_integer(Clip::UserId)
-                            .not_null()
-                            .default(0)
-                    )
+                    .col(big_integer(Clip::UserId).not_null().default(0))
                     .to_owned(),
             )
             .await?;
@@ -95,4 +91,3 @@ enum Clip {
     Status,
     UserId,
 }
-

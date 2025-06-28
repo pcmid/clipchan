@@ -44,12 +44,14 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(Expr::cust("CURRENT_TIMESTAMP")),
                     )
-                    .foreign_key(&mut ForeignKey::create()
-                        .name("fk_playlist_item_playlist")
-                        .from(PlaylistItem::Table, PlaylistItem::PlaylistId)
-                        .to(Playlist::Table, Playlist::Id)
-                        .on_delete(ForeignKeyAction::Cascade)
-                        .to_owned())
+                    .foreign_key(
+                        &mut ForeignKey::create()
+                            .name("fk_playlist_item_playlist")
+                            .from(PlaylistItem::Table, PlaylistItem::PlaylistId)
+                            .to(Playlist::Table, Playlist::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .to_owned(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -123,7 +125,12 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(PlaylistItem::Table).if_exists().to_owned())
+            .drop_table(
+                Table::drop()
+                    .table(PlaylistItem::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
             .await?;
         manager
             .drop_table(Table::drop().table(Playlist::Table).if_exists().to_owned())

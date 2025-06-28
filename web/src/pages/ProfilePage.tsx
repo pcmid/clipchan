@@ -24,7 +24,7 @@ const ProfilePage: React.FC = () => {
       setLoading(true);
       const [clips, playlists] = await Promise.all([
         api.listClips(),
-        api.listPlaylists()
+        (currentUser?.can_stream)?api.listPlaylists():Promise.resolve([])
       ]);
 
       setStats({
@@ -150,11 +150,12 @@ const ProfilePage: React.FC = () => {
                   <div className="stat-number">{stats.reviewedClips}</div>
                   <div className="stat-label">已审核切片</div>
                 </div>
+                {(currentUser.can_stream) && (
                 <div className="stat-card">
                   <div className="stat-icon">📋</div>
                   <div className="stat-number">{stats.totalPlaylists}</div>
                   <div className="stat-label">播放列表数</div>
-                </div>
+                </div>)}
               </div>
             </div>
 

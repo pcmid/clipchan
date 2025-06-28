@@ -143,7 +143,7 @@ pub async fn list_clip(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<user::Model>,
 ) -> impl IntoResponse {
-    match state.clip_svc.list_clips_by_user(user.id).await {
+    match state.clip_svc.list_clips_by_user(&user).await {
         Ok(clips) => {
             let response = clips
                 .into_iter()

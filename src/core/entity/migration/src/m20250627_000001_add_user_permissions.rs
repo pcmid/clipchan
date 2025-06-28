@@ -34,7 +34,6 @@ impl MigrationTrait for Migration {
             .await?;
 
         Ok(())
-
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {

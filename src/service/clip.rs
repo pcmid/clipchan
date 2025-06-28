@@ -10,7 +10,6 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 use tokio::{fs::File, io::BufWriter};
 use tracing::{debug, error, trace};
-use tracing::log::kv::ToValue;
 use uuid::Uuid;
 
 use crate::core::entity::{clip, user};
@@ -171,17 +170,34 @@ impl ClipService {
         Ok(())
     }
 
-    pub async fn list_clips_by_user(&self, user_id: i64) -> anyhow::Result<Vec<clip::Model>> {
-        trace!("Listing clips for user {}", user_id);
-        let clips = self
-            .clip_data
-            .list_clips_by_user(user_id)
-            .await
-            .map_err(|e| {
-                error!("Failed to fetch clips for user {}: {}", user_id, e);
-                e
-            })?;
-        debug!("Fetched {} clips for user {}", clips.len(), user_id);
+    pub async fn list_clips_by_user(&self, user: &user::Model) -> anyhow::Result<Vec<clip::Model>> {
+        trace!("Listing clips for user {}", user.id);
+        let clips =
+             match user.is_admin {
+            true => {
+                debug!("User {} is admin, fetching all clips", user.id);
+                self.clip_data
+                    .list_all_clips()
+                    .await
+                    .map_err(|e| {
+                        
+                        error!("Failed to fetch all clips: {}", e);
+                        e
+                    })?
+            }
+            false => {
+                debug!("Fetching clips for user {}", user.id);
+                self
+                    .clip_data
+                    .list_clips_by_user(user.id)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to fetch clips for user {}: {}", user.id, e);
+                        e
+                    })?
+            }
+        };
+        debug!("Fetched {} clips for user {}", clips.len(), user.id);
         Ok(clips)
     }
 
@@ -224,7 +240,7 @@ impl ClipService {
         })?;
 
         let clip = match clip {
-            Some(ref c) if c.status == clip::Status::Reviewed => {
+            Some(ref c) if (c.status == clip::Status::Reviewed && !user.is_admin ) => {
                 trace!("Clip {} is already reviewed, updating details", req.uuid);
                 anyhow::bail!("Clip {} is already reviewed", req.uuid);
             }

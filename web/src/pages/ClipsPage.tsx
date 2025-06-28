@@ -183,7 +183,7 @@ const ClipsPage: React.FC = () => {
       width: '20%',
       render: (record: Clip) => (
         <div className="action-buttons">
-          {(record.status!="reviewed" && isAdmin ) && (
+          {(record.status!="reviewed" || isAdmin ) && (
           <button
             className="action-btn"
             onClick={() => navigate(`/clip/edit/${record.uuid}`)}
