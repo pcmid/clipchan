@@ -158,8 +158,22 @@ impl Live {
         let mut params = BTreeMap::new();
         params.insert("room_id", room_id.to_string());
         params.insert("area_v2", area_id.to_string()); // 示例分区ID
-        params.insert("platform", "web".to_string()); // 这里要用web
-        params.insert("csrf", csrf);
+        params.insert("platform", "pc_link".to_string()); // 这里要用pc_link
+        params.insert("backup_stream", "0".to_string());
+
+        params.insert("csrf", csrf.clone());
+        params.insert("csrf_token", csrf.clone());
+
+        let wts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            .to_string();
+        params.insert("wts", wts.clone());
+
+        let w_rid = self.wbi.lock().await.sign_with_latest(&params).await?;
+        params.insert("w_rid", w_rid);
+
 
         let res: ResponseData<StartResponse> = self
             .session
@@ -214,7 +228,9 @@ impl Live {
         let csrf = self.session.credentials()?.bili_jct;
         let mut params = BTreeMap::new();
         params.insert("room_id", room_id.to_string());
-        params.insert("csrf", csrf);
+        params.insert("platform", "pc".to_string());
+        params.insert("csrf", csrf.clone());
+        params.insert("csrf_token", csrf.clone());
 
         let res: ResponseData<Value> = self
             .session
