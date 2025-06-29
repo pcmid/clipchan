@@ -238,7 +238,7 @@ pub async fn preview_clip(
     if let Some(token) = query.token {
         match jwt::verify_token(&token) {
             Ok(claims) => {
-                tracing::debug!("Token validated for user: {} ({})", claims.uname, claims.mid);
+                tracing::trace!("Token validated for user: {} ({})", claims.uname, claims.mid);
             }
             Err(_) => {
                 return Err((StatusCode::FORBIDDEN, "Token expired".to_string()));
