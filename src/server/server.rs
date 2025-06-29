@@ -167,6 +167,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 
     let admin_routes = Router::new()
         .route("/clip/{uuid}/reviewed", post(api::clip::reviewed_clip))
+        .route("/clip/{uuid}/preview", get(api::clip::preview_clip))
         .route("/admin/users", get(api::admin::list_all_users))
         .route(
             "/admin/users/{user_id}/permissions",

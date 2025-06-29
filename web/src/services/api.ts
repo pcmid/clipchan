@@ -129,6 +129,17 @@ class ApiService {
     await this.api.delete(`/clip/${uuid}`);
   }
 
+  // 获取视频预览Blob（仅admin可用）
+  async getClipPreviewBlob(uuid: string): Promise<string> {
+    const response = await this.api.get(`/clip/${uuid}/preview`, {
+      responseType: 'blob'
+    });
+
+    // 创建blob URL
+    const blob = new Blob([response.data], { type: 'video/mp4' });
+    return URL.createObjectURL(blob);
+  }
+
   // 播放列表相关API
   async listPlaylists(): Promise<Playlist[]> {
     const response = await this.api.get('/playlists');

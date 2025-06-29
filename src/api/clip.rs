@@ -3,12 +3,14 @@ use std::pin::pin;
 use std::sync::Arc;
 
 use axum::extract::{Multipart, Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::http::{StatusCode, HeaderMap, header};
+use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
+use axum::body::Body;
 use futures_util::TryStreamExt;
 use sea_orm::ActiveEnum;
 use serde::{Deserialize, Serialize};
+use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
 
 use crate::core::entity::{clip, user};
@@ -213,6 +215,42 @@ pub async fn delete_clip(
         Err(e) => {
             tracing::error!("Failed to delete clip: {}", e);
             Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        }
+    }
+}
+
+pub async fn preview_clip(
+    State(state): State<Arc<AppState>>,
+    Path(uuid): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    if uuid.is_nil() {
+        return Err((StatusCode::BAD_REQUEST, "Invalid UUID".to_string()));
+    }
+
+    // 获取视频文件流
+    match state.clip_svc.get_clip_stream(uuid).await {
+        Ok(stream) => {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::CONTENT_TYPE,
+                "video/mp4".parse().unwrap(),
+            );
+            headers.insert(
+                header::CACHE_CONTROL,
+                "no-cache, no-store, must-revalidate".parse().unwrap(),
+            );
+
+            let body = Body::from_stream(ReaderStream::new(stream));
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .body(body)
+                .unwrap();
+
+            Ok((headers, response))
+        }
+        Err(e) => {
+            tracing::error!("Failed to get clip stream for UUID {}: {}", uuid, e);
+            Err((StatusCode::NOT_FOUND, "Clip not found or not accessible".to_string()))
         }
     }
 }

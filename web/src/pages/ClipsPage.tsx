@@ -3,7 +3,7 @@ import { message, Modal, Table, Popconfirm } from 'antd';
 import {useApi, useAuth} from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import type { Clip, Playlist } from '../types';
-import { EditOutlined, CheckCircleOutlined, PlaySquareOutlined, DeleteOutlined } from '@ant-design/icons';
+import { EditOutlined, CheckCircleOutlined, PlaySquareOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import PageContainer from '../components/PageContainer/PageContainer';
 import ContentCard from '../components/ContentCard/ContentCard';
@@ -14,9 +14,14 @@ const ClipsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null);
   const [currentClipUuid, setCurrentClipUuid] = useState<string>('');
+  const [previewClipUuid, setPreviewClipUuid] = useState<string>('');
+  const [previewClipTitle, setPreviewClipTitle] = useState<string>('');
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('');
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const api = useApi();
   const navigate = useNavigate();
   const { isAdmin, canStream } = useAuth();
@@ -81,6 +86,43 @@ const ClipsPage: React.FC = () => {
       message.error('删除失败');
     }
   };
+
+  // Handle preview clip action (admin only)
+  const handlePreviewClip = async (uuid: string, title: string) => {
+    setPreviewClipUuid(uuid);
+    setPreviewClipTitle(title);
+    setLoadingPreview(true);
+    try {
+      const url = await api.getClipPreviewBlob(uuid);
+      setPreviewVideoUrl(url);
+      setIsPreviewModalVisible(true);
+    } catch (error) {
+      console.error('获取预览视频失败:', error);
+      message.error('获取预览视频失败');
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handlePreviewModalCancel = () => {
+    setIsPreviewModalVisible(false);
+    setPreviewClipUuid('');
+    setPreviewClipTitle('');
+    // 清理blob URL以释放内存
+    if (previewVideoUrl) {
+      URL.revokeObjectURL(previewVideoUrl);
+    }
+    setPreviewVideoUrl('');
+  };
+
+  // 组件卸载时清理blob URL
+  useEffect(() => {
+    return () => {
+      if (previewVideoUrl) {
+        URL.revokeObjectURL(previewVideoUrl);
+      }
+    };
+  }, [previewVideoUrl]);
 
   const handleModalCancel = () => {
     setIsModalVisible(false);
@@ -221,6 +263,15 @@ const ClipsPage: React.FC = () => {
               删除
             </button>
           </Popconfirm>
+          {isAdmin && (
+            <button
+              className="action-btn"
+              onClick={() => handlePreviewClip(record.uuid, record.title)}
+            >
+              <EyeOutlined />
+              预览
+            </button>
+          )}
         </div>
       ),
     },
@@ -276,6 +327,37 @@ const ClipsPage: React.FC = () => {
           >
             添加
           </button>
+        </div>
+      </Modal>
+
+      {/* 视频预览模态框（仅限管理员） */}
+      <Modal
+        title={`视频预览 - ${previewClipTitle}`}
+        open={isPreviewModalVisible}
+        onCancel={handlePreviewModalCancel}
+        footer={null}
+        width={800}
+        centered
+      >
+        <div className="preview-modal-content">
+          {loadingPreview ? (
+            <p>加载中...</p>
+          ) : (
+            previewVideoUrl && (
+              <video
+                className="preview-video"
+                controls
+                style={{ width: '100%', maxHeight: '400px' }}
+                src={previewVideoUrl}
+                onError={(e) => {
+                  console.error('视频加载失败:', e);
+                  message.error('视频加载失败，请稍后重试');
+                }}
+              >
+                您的浏览器不支持视频播放
+              </video>
+            )
+          )}
         </div>
       </Modal>
     </PageContainer>

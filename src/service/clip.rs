@@ -314,6 +314,25 @@ impl ClipService {
         Ok(())
     }
 
+    pub async fn get_clip_stream(
+        &self,
+        uuid: Uuid,
+    ) -> anyhow::Result<Box<dyn AsyncRead + Unpin + Send + 'static>> {
+        trace!("Getting clip stream for UUID: {}", uuid);
+
+        // 检查视频文件是否存在
+        let file_name = format!("{}.mp4", uuid);
+
+        // 从存储中获取文件流
+        self.storage
+            .get_file(&file_name)
+            .await
+            .map_err(|e| {
+                error!("Failed to get clip stream for {}: {}", uuid, e);
+                anyhow!("Failed to get clip stream: {}", e)
+            })
+    }
+
     async fn transcode_and_normalize(
         input_path: &PathBuf,
         output_path: &PathBuf,
