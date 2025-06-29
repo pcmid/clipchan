@@ -93,4 +93,39 @@ impl S3Storage {
             .map_err(|e| anyhow!("S3 delete_object error: {}", DisplayErrorContext(&e)))?;
         Ok(())
     }
+
+    pub(crate) async fn get_file_size(&self, path: &str) -> Result<u64> {
+        let resp = self
+            .client
+            .head_object()
+            .bucket(&self.bucket)
+            .key(path)
+            .send()
+            .await
+            .map_err(|e| anyhow!("S3 head_object error: {}", DisplayErrorContext(&e)))?;
+
+        Ok(resp.content_length().unwrap_or(0) as u64)
+    }
+
+    pub(crate) async fn get_object_range(
+        &self,
+        path: &str,
+        start: u64,
+        end: u64,
+    ) -> Result<Box<dyn AsyncRead + Unpin + Send + 'static>> {
+        let range = format!("bytes={}-{}", start, end);
+
+        let resp = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(path)
+            .range(range)
+            .send()
+            .await
+            .map_err(|e| anyhow!("S3 get_object range error: {}", DisplayErrorContext(&e)))?;
+
+        let stream = resp.body.into_async_read();
+        Ok(Box::new(stream))
+    }
 }

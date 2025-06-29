@@ -83,6 +83,37 @@ impl Storage {
         }
     }
 
+    pub async fn get_file_size(&self, name: &str) -> anyhow::Result<u64> {
+        match self {
+            Storage::Local(backend) => backend
+                .get_file_size(name)
+                .await
+                .context("Failed to get file size from local storage"),
+            Storage::S3(backend) => backend
+                .get_file_size(name)
+                .await
+                .context("Failed to get file size from S3 storage"),
+        }
+    }
+
+    pub async fn get_file_range(
+        &self,
+        name: &str,
+        start: u64,
+        end: u64,
+    ) -> anyhow::Result<Box<dyn AsyncRead + Unpin + Send + 'static>> {
+        match self {
+            Storage::Local(backend) => backend
+                .get_range(name, start, end)
+                .await
+                .context("Failed to get file range from local storage"),
+            Storage::S3(backend) => backend
+                .get_object_range(name, start, end)
+                .await
+                .context("Failed to get file range from S3 storage"),
+        }
+    }
+
     pub async fn delete_file(&self, name: &str) -> anyhow::Result<()> {
         match self {
             Storage::Local(backend) => backend

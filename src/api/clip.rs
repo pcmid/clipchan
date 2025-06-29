@@ -2,7 +2,7 @@ use std::io;
 use std::pin::pin;
 use std::sync::Arc;
 
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{StatusCode, HeaderMap, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
@@ -14,6 +14,7 @@ use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
 
 use crate::core::entity::{clip, user};
+use crate::core::jwt;
 use crate::server::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,34 +220,82 @@ pub async fn delete_clip(
     }
 }
 
+#[derive(Deserialize)]
+pub struct RangeQuery {
+    token: Option<String>,
+}
+
 pub async fn preview_clip(
     State(state): State<Arc<AppState>>,
     Path(uuid): Path<uuid::Uuid>,
+    Query(query): Query<RangeQuery>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
     if uuid.is_nil() {
         return Err((StatusCode::BAD_REQUEST, "Invalid UUID".to_string()));
     }
 
-    // 获取视频文件流
-    match state.clip_svc.get_clip_stream(uuid).await {
-        Ok(stream) => {
-            let mut headers = HeaderMap::new();
-            headers.insert(
+    if let Some(token) = query.token {
+        match jwt::verify_token(&token) {
+            Ok(claims) => {
+                tracing::debug!("Token validated for user: {} ({})", claims.uname, claims.mid);
+            }
+            Err(_) => {
+                return Err((StatusCode::FORBIDDEN, "Token expired".to_string()));
+            }
+        }
+    } else {
+        return Err((StatusCode::FORBIDDEN, "Forbidden".to_string()));
+    }
+
+    let range_header = headers.get(header::RANGE);
+
+    match state.clip_svc.get_clip_stream_with_range(uuid, range_header).await {
+        Ok((stream, file_size, range_info)) => {
+            let mut response_headers = HeaderMap::new();
+            response_headers.insert(
                 header::CONTENT_TYPE,
                 "video/mp4".parse().unwrap(),
             );
-            headers.insert(
-                header::CACHE_CONTROL,
-                "no-cache, no-store, must-revalidate".parse().unwrap(),
+            response_headers.insert(
+                header::ACCEPT_RANGES,
+                "bytes".parse().unwrap(),
+            );
+
+            let (status, content_length, _content_range) = match range_info {
+                Some((start, end)) => {
+                    response_headers.insert(
+                        header::CONTENT_RANGE,
+                        format!("bytes {}-{}/{}", start, end, file_size).parse().unwrap(),
+                    );
+                    (StatusCode::PARTIAL_CONTENT, end - start + 1, Some((start, end)))
+                },
+                None => {
+                    (StatusCode::OK, file_size, None)
+                }
+            };
+
+            response_headers.insert(
+                header::CONTENT_LENGTH,
+                content_length.to_string().parse().unwrap(),
+            );
+
+            response_headers.insert(
+                header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                "*".parse().unwrap(),
+            );
+            response_headers.insert(
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
+                "Range".parse().unwrap(),
             );
 
             let body = Body::from_stream(ReaderStream::new(stream));
             let response = Response::builder()
-                .status(StatusCode::OK)
+                .status(status)
                 .body(body)
                 .unwrap();
 
-            Ok((headers, response))
+            Ok((response_headers, response))
         }
         Err(e) => {
             tracing::error!("Failed to get clip stream for UUID {}: {}", uuid, e);

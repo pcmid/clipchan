@@ -314,16 +314,14 @@ impl ClipService {
         Ok(())
     }
 
-    pub async fn get_clip_stream(
+    pub async fn _get_clip_stream(
         &self,
         uuid: Uuid,
     ) -> anyhow::Result<Box<dyn AsyncRead + Unpin + Send + 'static>> {
         trace!("Getting clip stream for UUID: {}", uuid);
 
-        // 检查视频文件是否存在
         let file_name = format!("{}.mp4", uuid);
 
-        // 从存储中获取文件流
         self.storage
             .get_file(&file_name)
             .await
@@ -331,6 +329,39 @@ impl ClipService {
                 error!("Failed to get clip stream for {}: {}", uuid, e);
                 anyhow!("Failed to get clip stream: {}", e)
             })
+    }
+
+    pub async fn get_clip_stream_with_range(
+        &self,
+        uuid: Uuid,
+        range_header: Option<&axum::http::HeaderValue>,
+    ) -> anyhow::Result<(Box<dyn AsyncRead + Unpin + Send + 'static>, u64, Option<(u64, u64)>)> {
+        trace!("Getting clip stream with range for UUID: {}", uuid);
+
+        let file_name = format!("{}.mp4", uuid);
+
+        let file_size = self.storage.get_file_size(&file_name).await
+            .map_err(|e| anyhow!("Failed to get file size: {}", e))?;
+
+        let range_info = if let Some(range_val) = range_header {
+            if let Ok(range_str) = range_val.to_str() {
+                parse_range_header(range_str, file_size)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let stream = if let Some((start, end)) = range_info {
+            self.storage.get_file_range(&file_name, start, end).await
+                .map_err(|e| anyhow!("Failed to get file range: {}", e))?
+        } else {
+            self.storage.get_file(&file_name).await
+                .map_err(|e| anyhow!("Failed to get file: {}", e))?
+        };
+
+        Ok((stream, file_size, range_info))
     }
 
     async fn transcode_and_normalize(
@@ -374,4 +405,26 @@ pub async fn process_clip(job: ProcessJob, data: Data<Arc<ClipService>>) -> anyh
     debug!("Processing clip: {:?}", job.clip.uuid);
     data.process_clip(job.clip, job.input_path).await?;
     Ok(())
+}
+
+fn parse_range_header(range: &str, file_size: u64) -> Option<(u64, u64)> {
+    if range.starts_with("bytes=") {
+        let range = &range[6..];
+        let mut iter = range.split('-');
+        if let (Some(start_str), end_opt) = (iter.next(), iter.next()) {
+            if let Ok(start) = start_str.parse::<u64>() {
+                let end = if let Some(end_str) = end_opt {
+                    if !end_str.is_empty() {
+                        end_str.parse::<u64>().unwrap_or(file_size - 1)
+                    } else {
+                        file_size - 1
+                    }
+                } else {
+                    file_size - 1
+                };
+                return Some((start, end));
+            }
+        }
+    }
+    None
 }

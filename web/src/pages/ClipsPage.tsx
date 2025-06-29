@@ -17,7 +17,6 @@ const ClipsPage: React.FC = () => {
   const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null);
   const [currentClipUuid, setCurrentClipUuid] = useState<string>('');
-  const [previewClipUuid, setPreviewClipUuid] = useState<string>('');
   const [previewClipTitle, setPreviewClipTitle] = useState<string>('');
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('');
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
@@ -89,11 +88,11 @@ const ClipsPage: React.FC = () => {
 
   // Handle preview clip action (admin only)
   const handlePreviewClip = async (uuid: string, title: string) => {
-    setPreviewClipUuid(uuid);
     setPreviewClipTitle(title);
     setLoadingPreview(true);
     try {
-      const url = await api.getClipPreviewBlob(uuid);
+      // 直接获取支持Range请求的URL，而不是下载整个文件
+      const url = api.getClipPreviewUrl(uuid);
       setPreviewVideoUrl(url);
       setIsPreviewModalVisible(true);
     } catch (error) {
@@ -106,23 +105,11 @@ const ClipsPage: React.FC = () => {
 
   const handlePreviewModalCancel = () => {
     setIsPreviewModalVisible(false);
-    setPreviewClipUuid('');
     setPreviewClipTitle('');
-    // 清理blob URL以释放内存
-    if (previewVideoUrl) {
-      URL.revokeObjectURL(previewVideoUrl);
-    }
+    // 不再需要清理blob URL，因为我们使用的是直接URL
     setPreviewVideoUrl('');
   };
 
-  // 组件卸载时清理blob URL
-  useEffect(() => {
-    return () => {
-      if (previewVideoUrl) {
-        URL.revokeObjectURL(previewVideoUrl);
-      }
-    };
-  }, [previewVideoUrl]);
 
   const handleModalCancel = () => {
     setIsModalVisible(false);
@@ -347,11 +334,18 @@ const ClipsPage: React.FC = () => {
               <video
                 className="preview-video"
                 controls
+                preload="metadata"
                 style={{ width: '100%', maxHeight: '400px' }}
                 src={previewVideoUrl}
                 onError={(e) => {
                   console.error('视频加载失败:', e);
                   message.error('视频加载失败，请稍后重试');
+                }}
+                onLoadStart={() => {
+                  console.log('视频开始加载');
+                }}
+                onCanPlay={() => {
+                  console.log('视频可以开始播放');
                 }}
               >
                 您的浏览器不支持视频播放

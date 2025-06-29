@@ -129,15 +129,16 @@ class ApiService {
     await this.api.delete(`/clip/${uuid}`);
   }
 
-  // 获取视频预览Blob（仅admin可用）
-  async getClipPreviewBlob(uuid: string): Promise<string> {
-    const response = await this.api.get(`/clip/${uuid}/preview`, {
-      responseType: 'blob'
-    });
+  // 获取视频预览URL（仅admin可用，支持分段加载）
+  getClipPreviewUrl(uuid: string): string {
+    // 直接返回后端的预览端点URL，支持HTTP Range请求
+    return `${this.api.defaults.baseURL}/clip/${uuid}/preview?token=${this.token}`;
+  }
 
-    // 创建blob URL
-    const blob = new Blob([response.data], { type: 'video/mp4' });
-    return URL.createObjectURL(blob);
+  // 废弃的方法，保留以避免破坏现有代码
+  async getClipPreviewBlob(uuid: string): Promise<string> {
+    // 现在直接返回支持Range的URL而不是blob
+    return this.getClipPreviewUrl(uuid);
   }
 
   // 播放列表相关API
