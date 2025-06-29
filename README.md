@@ -11,6 +11,22 @@ ClipChan 是一款将视频切片自动转换为直播流并推送到哔哩哔�
 - 简洁易用的Web界面
 - 高效的视频流处理
 
+## screenshots
+
+### 切片管理
+![clips.png](./assets/Screenshots/clips.png)
+
+### 上传切片
+![upload.png](./assets/Screenshots/upload.png)
+
+### 播放列表
+![playlist.png](./assets/Screenshots/playlist.png)
+
+![playlist_detail.png](./assets/Screenshots/playlist_detail.png)
+
+### 个人资料
+![profile.png](./assets/Screenshots/profile.png)
+
 ## 系统要求
 
 - Rust 1.70+
@@ -172,9 +188,6 @@ title_valign = "top"
 ...
 
 配置优先级：命令行参数 > 环境变量 > 配置文件 > 默认值
-
-## TODO
-- [ ] 分离 data 和 service
 
 ## 开源协议
 
