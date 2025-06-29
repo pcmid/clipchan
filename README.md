@@ -177,13 +177,13 @@ title_valign = "top"
 
 主要配置项（在`.env`文件中设置）：
 
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| CLIPCHAN_PORT | 服务监听端口 | 3000 |
-| CLIPCHAN_DATABASE_URL | 数据库连接URL | sqlite://./data/clipchan.db?mode=rwc |
-| CLIPCHAN_TMP_DIR | 临时文件目录 | ./data/temp |
-| CLIPCHAN_STORAGE__LOCAL__PATH | 视频切片存储路径 | ./data/clips |
-| RUST_LOG | 日志级别设置 | clipchan=debug,bilive=debug,sea_orm=warn,sqlx=warn |
+| 配置项                            | 说明 | 默认值 |
+|--------------------------------|------|--------|
+| CLIPCHAN__PORT                 | 服务监听端口 | 3000 |
+| CLIPCHAN__DATABASE_URL         | 数据库连接URL | sqlite://./data/clipchan.db?mode=rwc |
+| CLIPCHAN__TMP_DIR              | 临时文件目录 | ./data/temp |
+| CLIPCHAN__STORAGE__LOCAL__PATH | 视频切片存储路径 | ./data/clips |
+| RUST_LOG                       | 日志级别设置 | clipchan=debug,bilive=debug,sea_orm=warn,sqlx=warn |
 
 ...
 
