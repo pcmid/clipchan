@@ -1,7 +1,11 @@
 [package]
 name = "bilive"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
+authors = ["pcmid <plzcmid at gmail dot com>"]
+repository = "https://github.com/pcmid/clipchan"
+description = "A Rust library for interacting with Bilibili's live streaming services."
+license = "MIT"
 
 [dependencies]
 md-5 = "0.10.6"
