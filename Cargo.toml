@@ -1,6 +1,6 @@
 [package]
 name = "clipchan"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -26,7 +26,6 @@ gstreamer = { version = "0.23.6",features = ["default"] }
 gstreamer-app = { version = "0.23.5",features = ["default"] }
 bilive = { path = "bilive" }
 jsonwebtoken = "9.2"
-axum-extra = { version = "0.10.1", features = ["typed-header"] }
 thiserror = "2.0"
 bytesize = { version = "2.0" , features = ["serde"] }
 qrcode = "0.14.1"
