@@ -35,6 +35,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let storage = Arc::new(
         Storage::new(&config.storage)
             .await
+            .map_err(|e| anyhow!("Failed to initialize storage: {}", e))
             .context("Failed to create local storage")?,
     );
     let tmp_dir = std::path::PathBuf::from(&config.tmp_dir);

@@ -5,37 +5,65 @@ use serde::Deserialize;
 use tokio::io::AsyncRead;
 
 use crate::storage::local::LocalStorageConfig;
+use crate::storage::s3::S3StorageConfig;
+
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum StorageConfig {
-    Local(LocalStorageConfig),
-    #[allow(dead_code)]
-    S3(S3StorageConfig),
+pub struct StorageConfig {
+    #[serde(rename = "type")]
+    pub _type : String, // "local" or "s3"
+    pub local: Option<LocalStorageConfig>,
+    pub s3: Option<S3StorageConfig>,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
-pub struct S3StorageConfig {
-    pub endpoint: String,
-    pub bucket: String,
-    pub region: String,
-    pub access_key: String,
-    pub secret_key: String,
+#[serde(rename_all = "lowercase")]
+pub enum StorageBackendConfig {
+    Local(LocalStorageConfig),
+    S3(S3StorageConfig),
 }
 
 #[derive(Clone)]
 pub enum Storage {
     Local(crate::storage::local::LocalStorage),
+    S3(crate::storage::s3::S3Storage),
 }
 
 impl Storage {
+    pub async fn new(cfg: &StorageConfig) -> anyhow::Result<Self> {
+        match cfg._type.as_str() {
+            "local" => {
+                if let Some(ref local_cfg) = cfg.local {
+                    let backend = crate::storage::local::LocalStorage::new(local_cfg)?;
+                    Ok(Self::Local(backend))
+                } else {
+                    Err(anyhow::anyhow!("Invalid configuration for local storage"))
+                }
+            }
+            "s3" => {
+                if let Some(ref s3_cfg) = cfg.s3 {
+                    let backend = crate::storage::s3::S3Storage::new(s3_cfg)?;
+                    Ok(Self::S3(backend))
+                } else {
+                    Err(anyhow::anyhow!("Invalid configuration for S3 storage"))
+                }
+            }
+            _ => Err(anyhow::anyhow!("Unsupported storage type: {}", cfg._type)),
+        }
+    }
+
     pub async fn store_file(&self, name: String, file: &PathBuf) -> anyhow::Result<()> {
         match self {
             Storage::Local(backend) => backend
                 .copy(file, name)
+                .await.
+                map_err(|e| anyhow::anyhow!("Failed to copy file to local storage: {}", e)),
+            Storage::S3(backend) => backend
+                .put_object(file, name)
                 .await
-                .context("Failed to copy file to local storage"),
+                .map_err(|e| anyhow::anyhow!("Failed to upload file to S3 storage: {}", e)),
         }
     }
 
@@ -48,6 +76,10 @@ impl Storage {
                 .get(name)
                 .await
                 .context("Failed to retrieve file from local storage"),
+            Storage::S3(backend) => backend
+                .get_object(name)
+                .await
+                .context("Failed to retrieve file from S3 storage"),
         }
     }
 
@@ -56,21 +88,11 @@ impl Storage {
             Storage::Local(backend) => backend
                 .delete(&name)
                 .await
-                .with_context(|| format!("Failed to delete file: {}", name)),
-        }
-    }
-}
-
-impl Storage {
-    pub async fn new(cfg: &StorageConfig) -> anyhow::Result<Self> {
-        match cfg {
-            StorageConfig::Local(cfg) => {
-                let backend = crate::storage::local::LocalStorage::new(cfg)?;
-                Ok(Self::Local(backend))
-            }
-            StorageConfig::S3(_) => {
-                anyhow::bail!("Unimplemented S3 storage backend");
-            }
+                .map_err(|e| anyhow::anyhow!("Failed to delete file from local storage: {}", e)),
+            Storage::S3(backend) => backend
+                .delete(&name)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to delete file from S3 storage: {}", e)),
         }
     }
 }

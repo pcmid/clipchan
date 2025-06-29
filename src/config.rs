@@ -20,8 +20,8 @@ pub struct Config {
 impl Config {
     pub fn load(config_file: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let config = ConfigLoader::builder()
-            .add_source(File::from(config_file.into()).required(true))
-            .add_source(Environment::with_prefix("CLIPCHAN").separator("_"))
+            .add_source(File::from(config_file.into()).required(false))
+            .add_source(Environment::with_prefix("CLIPCHAN").separator("__"))
             .build()?
             .try_deserialize()?;
         Ok(config)

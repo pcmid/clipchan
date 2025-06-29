@@ -50,7 +50,6 @@ impl LocalStorage {
             "Retrieving file from local storage: {}",
             file_path.display()
         );
-        // check if the file exists
         if !file_path.exists() {
             return Err(anyhow::anyhow!("File not found: {}", file_path.display()));
         }

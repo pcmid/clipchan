@@ -172,23 +172,17 @@ impl ClipService {
 
     pub async fn list_clips_by_user(&self, user: &user::Model) -> anyhow::Result<Vec<clip::Model>> {
         trace!("Listing clips for user {}", user.id);
-        let clips =
-             match user.is_admin {
+        let clips = match user.is_admin {
             true => {
                 debug!("User {} is admin, fetching all clips", user.id);
-                self.clip_data
-                    .list_all_clips()
-                    .await
-                    .map_err(|e| {
-                        
-                        error!("Failed to fetch all clips: {}", e);
-                        e
-                    })?
+                self.clip_data.list_all_clips().await.map_err(|e| {
+                    error!("Failed to fetch all clips: {}", e);
+                    e
+                })?
             }
             false => {
                 debug!("Fetching clips for user {}", user.id);
-                self
-                    .clip_data
+                self.clip_data
                     .list_clips_by_user(user.id)
                     .await
                     .map_err(|e| {
@@ -240,7 +234,7 @@ impl ClipService {
         })?;
 
         let clip = match clip {
-            Some(ref c) if (c.status == clip::Status::Reviewed && !user.is_admin ) => {
+            Some(ref c) if (c.status == clip::Status::Reviewed && !user.is_admin) => {
                 trace!("Clip {} is already reviewed, updating details", req.uuid);
                 anyhow::bail!("Clip {} is already reviewed", req.uuid);
             }
@@ -249,7 +243,6 @@ impl ClipService {
                 return Ok(None);
             }
         };
-
 
         let mut active_clip = clip.clone().into_active_model();
         active_clip.title = Set(req.title);
@@ -312,8 +305,7 @@ impl ClipService {
             .await
             .map_err(|e| {
                 error!("Failed to delete clip file from storage: {}", e);
-                e
-            })?;
+            }).ok();
 
         self.clip_data
             .delete_clip_with_playlist_items(user.id, uuid)

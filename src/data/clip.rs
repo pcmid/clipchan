@@ -32,10 +32,8 @@ impl ClipData {
         Ok(clips)
     }
 
-    pub(crate) async fn list_all_clips(&self) ->  anyhow::Result<Vec<clip::Model>> {
-        let clips = clip::Entity::find()
-            .all(&self.db)
-            .await?;
+    pub(crate) async fn list_all_clips(&self) -> anyhow::Result<Vec<clip::Model>> {
+        let clips = clip::Entity::find().all(&self.db).await?;
         Ok(clips)
     }
 
