@@ -5,6 +5,7 @@ import type { Account, AppConfig, LoginInfo, User } from '../types';
 // 默认配置
 const defaultConfig: AppConfig = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+  defaultApiBaseUrl: import.meta.env.VITE_API_BASE_URL,
 };
 
 interface AuthContextValue {
@@ -36,7 +37,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // 从本地存储加载配置
   const loadConfig = (): AppConfig => {
     const storedConfig = localStorage.getItem('appConfig');
-    return storedConfig ? JSON.parse(storedConfig) : defaultConfig;
+    const config = storedConfig ? JSON.parse(storedConfig) : defaultConfig;
+    config.defaultApiBaseUrl = import.meta.env.VITE_API_BASE_URL; // 确保默认API基础URL正确
+    return config
   };
 
   // 从本地存储加载用户信息

@@ -131,6 +131,7 @@ export interface RoomInfo {
 // 应用配置类型
 export interface AppConfig {
   apiBaseUrl: string;
+  defaultApiBaseUrl: string;
 }
 
 // 服务器配置类型

@@ -37,7 +37,7 @@ const SettingsPage: React.FC = () => {
 
   const handleReset = () => {
     form.setFieldsValue({
-      apiBaseUrl: 'http://localhost:3000',
+      apiBaseUrl: config.defaultApiBaseUrl,
     });
   };
 
