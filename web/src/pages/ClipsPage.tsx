@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { message, Modal, Table, Popconfirm } from 'antd';
 import {useApi, useAuth} from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +21,7 @@ const ClipsPage: React.FC = () => {
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string>('');
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const api = useApi();
   const navigate = useNavigate();
   const { isAdmin, canStream } = useAuth();
@@ -104,9 +105,13 @@ const ClipsPage: React.FC = () => {
   };
 
   const handlePreviewModalCancel = () => {
+    // 主动暂停视频播放
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0; // 重置播放位置
+    }
     setIsPreviewModalVisible(false);
     setPreviewClipTitle('');
-    // 不再需要清理blob URL，因为我们使用的是直接URL
     setPreviewVideoUrl('');
   };
 
@@ -332,6 +337,7 @@ const ClipsPage: React.FC = () => {
           ) : (
             previewVideoUrl && (
               <video
+                ref={videoRef}
                 className="preview-video"
                 controls
                 preload="metadata"
