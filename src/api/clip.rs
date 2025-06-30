@@ -15,6 +15,7 @@ use tokio_util::io::StreamReader;
 
 use crate::core::entity::{clip, user};
 use crate::core::jwt;
+use crate::core::jwt::DEFAULT_SECRET_KEY;
 use crate::server::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,7 +237,9 @@ pub async fn preview_clip(
     }
 
     if let Some(token) = query.token {
-        match jwt::verify_token(&token) {
+        // Get JWT secret from config
+        let jwt_secret = state.config.jwt_secret.as_deref().unwrap_or(DEFAULT_SECRET_KEY);
+        match jwt::verify_token(&token, jwt_secret) {
             Ok(claims) => {
                 tracing::trace!("Token validated for user: {} ({})", claims.uname, claims.mid);
             }

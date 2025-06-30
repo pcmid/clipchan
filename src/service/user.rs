@@ -7,11 +7,12 @@ use crate::data::UserData;
 
 pub struct UserService {
     user_data: UserData,
+    jwt_secret: String,
 }
 
 impl UserService {
-    pub fn new(user_data: UserData) -> Self {
-        Self { user_data }
+    pub fn new(user_data: UserData, jwt_secret: String) -> Self {
+        Self { user_data, jwt_secret }
     }
 
     pub async fn get_login_qrcode(&self) -> anyhow::Result<bilive::bapi::QrCodeInfo> {
@@ -101,7 +102,7 @@ impl UserService {
 
     pub async fn get_user_by_token(&self, token: &str) -> anyhow::Result<Option<user::Model>> {
         let claims =
-            jwt::verify_token(token).map_err(|e| anyhow::anyhow!("Invalid token: {}", e))?;
+            jwt::verify_token(token, &self.jwt_secret).map_err(|e| anyhow::anyhow!("Invalid token: {}", e))?;
         let user = self
             .get_user_by_mid(claims.mid)
             .await?
@@ -115,7 +116,7 @@ impl UserService {
             .await?
             .ok_or_else(|| anyhow::anyhow!("User not found"))?;
 
-        let token = jwt::create_token(user.mid, user.uname, 30)
+        let token = jwt::create_token(user.mid, user.uname, 30, &self.jwt_secret)
             .map_err(|e| anyhow::anyhow!("Failed to create JWT token: {}", e))?;
 
         Ok(token)

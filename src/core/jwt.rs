@@ -3,9 +3,7 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
-// JWT密钥，实际生产环境应该从环境变量或配置文件中获取
-// 这里仅作为示例使用了硬编码的密钥
-static SECRET_KEY: &[u8] = b"YOUR_SECRET_KEY_HERE";
+pub static DEFAULT_SECRET_KEY: &str = "DEFAULT_JWT_SECRET";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -53,7 +51,7 @@ impl From<jsonwebtoken::errors::Error> for JwtError {
     }
 }
 
-pub fn create_token(mid: i64, uname: String, expire_days: i64) -> Result<String, JwtError> {
+pub fn create_token(mid: i64, uname: String, expire_days: i64, jwt_secret: &str) -> Result<String, JwtError> {
     let now = Utc::now();
     let expire_time = now + Duration::days(expire_days);
 
@@ -67,15 +65,15 @@ pub fn create_token(mid: i64, uname: String, expire_days: i64) -> Result<String,
     encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(SECRET_KEY),
+        &EncodingKey::from_secret(jwt_secret.as_bytes()),
     )
     .map_err(|_| JwtError::TokenCreation)
 }
 
-pub fn verify_token(token: &str) -> Result<Claims, JwtError> {
+pub fn verify_token(token: &str, jwt_secret: &str) -> Result<Claims, JwtError> {
     let token_data = decode::<Claims>(
         token,
-        &DecodingKey::from_secret(SECRET_KEY),
+        &DecodingKey::from_secret(jwt_secret.as_bytes()),
         &Validation::default(),
     )?;
 

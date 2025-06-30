@@ -11,6 +11,7 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub max_file_size: bytesize::ByteSize,
+    pub jwt_secret: Option<String>,
     pub database_url: String,
     pub tmp_dir: String,
     pub storage: StorageConfig,

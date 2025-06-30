@@ -13,6 +13,7 @@ use tower_http::cors::CorsLayer;
 
 use crate::api;
 use crate::config::Config;
+use crate::core::jwt::DEFAULT_SECRET_KEY;
 use crate::core::storage::Storage;
 use crate::data::{ClipData, PlaylistData, UserData};
 use crate::server::auth;
@@ -53,8 +54,14 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let clip_data = ClipData::new(db.clone());
     let playlist_data = PlaylistData::new(db.clone());
 
+    // Get JWT secret from config or use default
+    let jwt_secret = config.jwt_secret.clone().unwrap_or_else(|| {
+        tracing::warn!("No jwt_secret configured, using default. This is not recommended for production!");
+        DEFAULT_SECRET_KEY.to_string()
+    });
+
     // Create service layer instances with data layer dependencies
-    let user_svc = Arc::new(UserService::new(user_data));
+    let user_svc = Arc::new(UserService::new(user_data, jwt_secret));
     let playlist_svc = Arc::new(PlaylistService::new(playlist_data));
     let clip_svc = Arc::new(ClipService::new(
         tmp_dir,
