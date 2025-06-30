@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, message } from 'antd';
 import zhCN from 'antd/lib/locale/zh_CN';
 import { AppProvider, useAuth } from './context/AppContext';
