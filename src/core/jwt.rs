@@ -51,7 +51,12 @@ impl From<jsonwebtoken::errors::Error> for JwtError {
     }
 }
 
-pub fn create_token(mid: i64, uname: String, expire_days: i64, jwt_secret: &str) -> Result<String, JwtError> {
+pub fn create_token(
+    mid: i64,
+    uname: String,
+    expire_days: i64,
+    jwt_secret: &str,
+) -> Result<String, JwtError> {
     let now = Utc::now();
     let expire_time = now + Duration::days(expire_days);
 

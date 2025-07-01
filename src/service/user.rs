@@ -12,7 +12,10 @@ pub struct UserService {
 
 impl UserService {
     pub fn new(user_data: UserData, jwt_secret: String) -> Self {
-        Self { user_data, jwt_secret }
+        Self {
+            user_data,
+            jwt_secret,
+        }
     }
 
     pub async fn get_login_qrcode(&self) -> anyhow::Result<bilive::bapi::QrCodeInfo> {
@@ -101,8 +104,8 @@ impl UserService {
     }
 
     pub async fn get_user_by_token(&self, token: &str) -> anyhow::Result<Option<user::Model>> {
-        let claims =
-            jwt::verify_token(token, &self.jwt_secret).map_err(|e| anyhow::anyhow!("Invalid token: {}", e))?;
+        let claims = jwt::verify_token(token, &self.jwt_secret)
+            .map_err(|e| anyhow::anyhow!("Invalid token: {}", e))?;
         let user = self
             .get_user_by_mid(claims.mid)
             .await?

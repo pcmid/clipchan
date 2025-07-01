@@ -75,7 +75,10 @@ impl LocalStorage {
 
     pub(crate) async fn get_file_size(&self, path: &str) -> Result<u64> {
         let file_path = self.path.join(path);
-        tracing::trace!("Getting file size from local storage: {}", file_path.display());
+        tracing::trace!(
+            "Getting file size from local storage: {}",
+            file_path.display()
+        );
         if !file_path.exists() {
             return Err(anyhow::anyhow!("File not found: {}", file_path.display()));
         }

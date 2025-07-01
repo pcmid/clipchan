@@ -1,8 +1,10 @@
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use apalis::prelude::{Data, MemoryStorage, MessageQueue};
+use regex::Regex;
 use sea_orm::{IntoActiveModel, Set};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncRead;
@@ -98,15 +100,14 @@ impl ClipService {
         let mut active_clip = clip.clone().into_active_model();
         active_clip.status = Set(clip::Status::Processing);
         let clip = self.clip_data.update_clip(active_clip).await?;
-
         let output_path = self.tmp_dir.join(format!("{}_processed.mp4", clip.uuid));
-
-        match ClipService::transcode_and_normalize(&file, &output_path).await {
+        match self.transcode_and_normalize(&file, &output_path).await {
             Ok(_) => {
+                tokio::fs::rename(output_path, &file).await?;
                 debug!("Clip {} processed successfully", clip.uuid);
             }
             Err(e) => {
-                error!("Failed to process clip {}: {}", clip.uuid, e);
+                error!("Failed to normalize clip {}: {}", clip.uuid, e);
                 let mut active_clip = clip.clone().into_active_model();
                 active_clip.status = Set(clip::Status::Failed);
                 self.clip_data
@@ -122,7 +123,7 @@ impl ClipService {
 
         match self
             .storage
-            .store_file(format!("{}.mp4", clip.uuid.to_string()), &output_path)
+            .store_file(format!("{}.mp4", clip.uuid.to_string()), &file)
             .await
         {
             Ok(_) => {
@@ -143,17 +144,10 @@ impl ClipService {
             }
         }
 
-        // remove the temporary file after storing
         tokio::fs::remove_file(file)
             .await
             .map_err(|e| {
                 error!("Failed to remove clip file: {}", e);
-            })
-            .ok();
-        tokio::fs::remove_file(output_path)
-            .await
-            .map_err(|e| {
-                error!("Failed to remove processed clip file: {}", e);
             })
             .ok();
 
@@ -305,7 +299,8 @@ impl ClipService {
             .await
             .map_err(|e| {
                 error!("Failed to delete clip file from storage: {}", e);
-            }).ok();
+            })
+            .ok();
 
         self.clip_data
             .delete_clip_with_playlist_items(user.id, uuid)
@@ -322,25 +317,29 @@ impl ClipService {
 
         let file_name = format!("{}.mp4", uuid);
 
-        self.storage
-            .get_file(&file_name)
-            .await
-            .map_err(|e| {
-                error!("Failed to get clip stream for {}: {}", uuid, e);
-                anyhow!("Failed to get clip stream: {}", e)
-            })
+        self.storage.get_file(&file_name).await.map_err(|e| {
+            error!("Failed to get clip stream for {}: {}", uuid, e);
+            anyhow!("Failed to get clip stream: {}", e)
+        })
     }
 
     pub async fn get_clip_stream_with_range(
         &self,
         uuid: Uuid,
         range_header: Option<&axum::http::HeaderValue>,
-    ) -> anyhow::Result<(Box<dyn AsyncRead + Unpin + Send + 'static>, u64, Option<(u64, u64)>)> {
+    ) -> anyhow::Result<(
+        Box<dyn AsyncRead + Unpin + Send + 'static>,
+        u64,
+        Option<(u64, u64)>,
+    )> {
         trace!("Getting clip stream with range for UUID: {}", uuid);
 
         let file_name = format!("{}.mp4", uuid);
 
-        let file_size = self.storage.get_file_size(&file_name).await
+        let file_size = self
+            .storage
+            .get_file_size(&file_name)
+            .await
             .map_err(|e| anyhow!("Failed to get file size: {}", e))?;
 
         let range_info = if let Some(range_val) = range_header {
@@ -354,10 +353,14 @@ impl ClipService {
         };
 
         let stream = if let Some((start, end)) = range_info {
-            self.storage.get_file_range(&file_name, start, end).await
+            self.storage
+                .get_file_range(&file_name, start, end)
+                .await
                 .map_err(|e| anyhow!("Failed to get file range: {}", e))?
         } else {
-            self.storage.get_file(&file_name).await
+            self.storage
+                .get_file(&file_name)
+                .await
                 .map_err(|e| anyhow!("Failed to get file: {}", e))?
         };
 
@@ -365,28 +368,68 @@ impl ClipService {
     }
 
     async fn transcode_and_normalize(
+        &self,
         input_path: &PathBuf,
         output_path: &PathBuf,
     ) -> anyhow::Result<()> {
-        let status = Command::new("ffmpeg")
+        let analysis = Command::new("ffmpeg")
             .arg("-i")
             .arg(input_path)
             .arg("-af")
-            .arg("loudnorm")
-            .arg("-c:v")
+            .arg("loudnorm=print_format=json")
+            .arg("-f")
+            .arg("null")
+            .arg("/dev/null")
+            .stdin(Stdio::null())
+            .stderr(Stdio::piped())
+            .stdout(Stdio::null())
+            .output()
+            .await
+            .map_err(|e| anyhow!("Failed to run ffmpeg to analyze loudness: {}", e))?;
+
+        let stderr = String::from_utf8_lossy(&analysis.stderr);
+
+        let re = Regex::new(r"(?s)\{.*?\}").expect("Failed to compile regex");
+        let Some(mat) = re.find(&stderr) else {
+            anyhow::bail!(
+                "Failed to find loudnorm analysis in output, file: {}, output: {}",
+                input_path.display(),
+                stderr
+            );
+        };
+        let json_str = mat.as_str();
+        trace!("FFmpeg loudnorm analysis: {}", json_str);
+
+        #[derive(Deserialize, Debug)]
+        struct LoudnessInfo {
+            input_i: String,
+            input_tp: String,
+            input_lra: String,
+            input_thresh: String,
+        }
+        let info: LoudnessInfo = match serde_json::from_str(json_str) {
+            Ok(val) => val,
+            Err(e) => {
+                anyhow::bail!("Failed to parse loudnorm analysis JSON: {}", e);
+            }
+        };
+
+        let status = Command::new("ffmpeg")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-i")
+            .arg(input_path)
+            .arg("-af")
+            .arg(format!(
+                "loudnorm=linear=true:I=-14:TP=0:LRA=50:measured_I={}:measured_TP={}:measured_LRA={}:measured_thresh={}",
+                info.input_i, info.input_tp, info.input_lra, info.input_thresh
+            ))
+            .arg("-ar")
+            .arg("48k")
+            .arg("-vcodec")
             .arg("copy")
-            // .arg("libx264")
-            // .arg("-preset")
-            // .arg("medium")
-            .arg("-c:a")
-            .arg("aac")
-            .arg("-b:a")
-            .arg("320k")
-            .arg("-movflags")
-            .arg("faststart")
             .arg(output_path)
-            .status()
-            .await?;
+            .status().await.map_err(|e| anyhow!("Failed to run ffmpeg: {}", e))?;
 
         if !status.success() {
             anyhow::bail!("FFmpeg command failed with status: {}", status);

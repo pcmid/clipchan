@@ -7,12 +7,11 @@ use tokio::io::AsyncRead;
 use crate::storage::local::LocalStorageConfig;
 use crate::storage::s3::S3StorageConfig;
 
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub struct StorageConfig {
     #[serde(rename = "type")]
-    pub _type : String, // "local" or "s3"
+    pub _type: String, // "local" or "s3"
     pub local: Option<LocalStorageConfig>,
     pub s3: Option<S3StorageConfig>,
 }
@@ -58,8 +57,8 @@ impl Storage {
         match self {
             Storage::Local(backend) => backend
                 .copy(file, name)
-                .await.
-                map_err(|e| anyhow::anyhow!("Failed to copy file to local storage: {}", e)),
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to copy file to local storage: {}", e)),
             Storage::S3(backend) => backend
                 .put_object(file, name)
                 .await

@@ -1170,6 +1170,7 @@ dependencies = [
  "jsonwebtoken",
  "migration",
  "qrcode",
+ "regex",
  "reqwest_cookie_store",
  "sea-orm",
  "serde",

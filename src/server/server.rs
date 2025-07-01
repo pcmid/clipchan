@@ -56,7 +56,9 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 
     // Get JWT secret from config or use default
     let jwt_secret = config.jwt_secret.clone().unwrap_or_else(|| {
-        tracing::warn!("No jwt_secret configured, using default. This is not recommended for production!");
+        tracing::warn!(
+            "No jwt_secret configured, using default. This is not recommended for production!"
+        );
         DEFAULT_SECRET_KEY.to_string()
     });
 

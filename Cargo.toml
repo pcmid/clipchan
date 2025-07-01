@@ -33,6 +33,7 @@ dashmap = "6.1.0"
 cookie_store = "0.21.1"
 reqwest_cookie_store = { version = "0.8.0", features = ["serde"] }
 aws-sdk-s3 = {version = "1.94.0", features = ["behavior-version-latest"]}
+regex = "1.11.1"
 
 [dev-dependencies]
 tokio = { version = "1.45", features = ["full"] }

@@ -2,11 +2,11 @@ use std::io;
 use std::pin::pin;
 use std::sync::Arc;
 
+use axum::body::Body;
 use axum::extract::{Multipart, Path, Query, State};
-use axum::http::{StatusCode, HeaderMap, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
-use axum::body::Body;
 use futures_util::TryStreamExt;
 use sea_orm::ActiveEnum;
 use serde::{Deserialize, Serialize};
@@ -80,8 +80,14 @@ pub async fn upload(
                 let file_ext = field
                     .file_name()
                     .and_then(|name| name.split('.').last())
-                    .unwrap_or("mp4")
+                    .unwrap_or("")
                     .to_string();
+                if !["mp4", "mkv", "avi", "mov", "flv"].contains(&file_ext.as_str()) {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        format!("Unsupported file type: {file_ext}").into(),
+                    ));
+                }
 
                 let body_with_io_error = field.map_err(io::Error::other);
                 let mut uploaded_file_reader = pin!(StreamReader::new(body_with_io_error));
@@ -238,10 +244,18 @@ pub async fn preview_clip(
 
     if let Some(token) = query.token {
         // Get JWT secret from config
-        let jwt_secret = state.config.jwt_secret.as_deref().unwrap_or(DEFAULT_SECRET_KEY);
+        let jwt_secret = state
+            .config
+            .jwt_secret
+            .as_deref()
+            .unwrap_or(DEFAULT_SECRET_KEY);
         match jwt::verify_token(&token, jwt_secret) {
             Ok(claims) => {
-                tracing::trace!("Token validated for user: {} ({})", claims.uname, claims.mid);
+                tracing::trace!(
+                    "Token validated for user: {} ({})",
+                    claims.uname,
+                    claims.mid
+                );
             }
             Err(_) => {
                 return Err((StatusCode::FORBIDDEN, "Token expired".to_string()));
@@ -253,29 +267,31 @@ pub async fn preview_clip(
 
     let range_header = headers.get(header::RANGE);
 
-    match state.clip_svc.get_clip_stream_with_range(uuid, range_header).await {
+    match state
+        .clip_svc
+        .get_clip_stream_with_range(uuid, range_header)
+        .await
+    {
         Ok((stream, file_size, range_info)) => {
             let mut response_headers = HeaderMap::new();
-            response_headers.insert(
-                header::CONTENT_TYPE,
-                "video/mp4".parse().unwrap(),
-            );
-            response_headers.insert(
-                header::ACCEPT_RANGES,
-                "bytes".parse().unwrap(),
-            );
+            response_headers.insert(header::CONTENT_TYPE, "video/mp4".parse().unwrap());
+            response_headers.insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
 
             let (status, content_length, _content_range) = match range_info {
                 Some((start, end)) => {
                     response_headers.insert(
                         header::CONTENT_RANGE,
-                        format!("bytes {}-{}/{}", start, end, file_size).parse().unwrap(),
+                        format!("bytes {}-{}/{}", start, end, file_size)
+                            .parse()
+                            .unwrap(),
                     );
-                    (StatusCode::PARTIAL_CONTENT, end - start + 1, Some((start, end)))
-                },
-                None => {
-                    (StatusCode::OK, file_size, None)
+                    (
+                        StatusCode::PARTIAL_CONTENT,
+                        end - start + 1,
+                        Some((start, end)),
+                    )
                 }
+                None => (StatusCode::OK, file_size, None),
             };
 
             response_headers.insert(
@@ -283,26 +299,23 @@ pub async fn preview_clip(
                 content_length.to_string().parse().unwrap(),
             );
 
-            response_headers.insert(
-                header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                "*".parse().unwrap(),
-            );
+            response_headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
             response_headers.insert(
                 header::ACCESS_CONTROL_ALLOW_HEADERS,
                 "Range".parse().unwrap(),
             );
 
             let body = Body::from_stream(ReaderStream::new(stream));
-            let response = Response::builder()
-                .status(status)
-                .body(body)
-                .unwrap();
+            let response = Response::builder().status(status).body(body).unwrap();
 
             Ok((response_headers, response))
         }
         Err(e) => {
             tracing::error!("Failed to get clip stream for UUID {}: {}", uuid, e);
-            Err((StatusCode::NOT_FOUND, "Clip not found or not accessible".to_string()))
+            Err((
+                StatusCode::NOT_FOUND,
+                "Clip not found or not accessible".to_string(),
+            ))
         }
     }
 }
